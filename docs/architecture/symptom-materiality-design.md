@@ -334,7 +334,14 @@ with every Kafka relation either proven direct-incompatible or `UNKNOWN`.
 1. **Origin rule:** what establishes `CAUSAL_ORIGIN_VERIFIED`.
 2. **Effect-compatibility table:** for example, whether `ECONNREFUSED` at a peer can arise from the caller's side.
 3. **Digest:** whether explanation records enter a separate digest from v1 or only from stage 6.
+   **Decided 2026-10-13 (owner):** not in v1. Explanations are stored beside the diagnosis and enter no digest; a
+   separate digest comes with authority (stage 6).
 4. **Direct proof forms of §4.4:** their exact conditions.
 5. **Independence classes of coverage channels,** and whether any current channel is `INDEPENDENT`.
+   **Decided 2026-10-13 (owner):** only the testbed caller's ledger (`WorkloadDriver`, its own process and host,
+   outside the workload's telemetry path) is `INDEPENDENT`. Loki, Tempo and the workload's own counters are
+   `SAME_PROCESS` or `SAME_EXPORTER`. Where no caller ledger exists the certificate is `UNKNOWN`.
+
+Decisions 1, 2, 4, 6 and 7 stay `UNKNOWN` in v1: origin is always `UNKNOWN`, and nothing is excluded.
 6. **Journal completeness of the pod population:** assumed in §33–§34, not proven here.
 7. **Investigation budget values.**

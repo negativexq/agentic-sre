@@ -168,6 +168,8 @@ FAULT_BY_SCENARIO: dict[str, str] = {
     "config-error-payment": "env-error",
     "config-crash-payment": "env-crash",
     "negative-dbdelay-decoy": "env-db-delay",
+    # m21 §31.5 DEV check: a delay on kafka's Pod alone, slowing order-service's requests at their publish
+    "dependency-delay-kafka": "kafka-delay",
 }
 # Variants whose faulted service is also the one showing the symptom: one probe, two views (contract §4.2).
 DIRECT_SCENARIOS = frozenset({"direct-stress-payment", "scheduled-stress-order"})
@@ -181,6 +183,7 @@ ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
     "config-error-payment": DEPENDENCY_ALERTS | ERROR_ALERTS,
     "config-crash-payment": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"} | ERROR_ALERTS,
     "negative-dbdelay-decoy": DEPENDENCY_ALERTS | {"PaymentServiceLatencyCritical"},
+    "dependency-delay-kafka": DEPENDENCY_ALERTS | ERROR_ALERTS,
 }
 TIMELINE_ALERTS_BY_SCENARIO: dict[str, frozenset[str]] = {
     "competing-loss-podkill": LATENCY_ALERTS | ERROR_ALERTS,

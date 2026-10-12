@@ -41,6 +41,7 @@ from packages.rca.model import (
     object_key,
     snapshot_evidence_id,
 )
+from packages.rca.model import RESOURCE_BASELINE_LEAD as RESOURCE_BASELINE_LEAD
 from packages.rca.pod_status import LifecycleStatusRecord, pod_status_from_lifecycle
 from packages.rca.provider_adapter import (
     ProviderBoundary,
@@ -48,8 +49,7 @@ from packages.rca.provider_adapter import (
 )
 
 _log = logging.getLogger(__name__)
-# Resource reads start this long before the requested time so a baseline exists.
-RESOURCE_BASELINE_LEAD = timedelta(minutes=5)
+# Resource reads start RESOURCE_BASELINE_LEAD before the requested time so a baseline exists.
 PROMETHEUS_MAX_QUERY_SPAN = timedelta(hours=1)
 
 # (API group client attribute, list method, kind). Secrets are deliberately not read.

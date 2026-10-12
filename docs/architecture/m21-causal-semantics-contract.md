@@ -3268,6 +3268,10 @@ cannot show that for a series that comes in bursts.
 The query and its window stay unchanged. The reader reports the maximum of each part. The split comes from the read
 itself: its first `RESOURCE_BASELINE_LEAD`.
 
+**The split is applied to the case's own resource read only** (owner-approved 2026-10-12). That read begins at
+`reference − 10 min`, so its first `RESOURCE_BASELINE_LEAD` is the lead above. A read made by an investigation tool
+has a window of its own, so its first minutes are no baseline. It carries no split and keeps the previous rule.
+
 **A `RESOURCE_PRESSURE` finding is made** for a container and resource when both hold:
 1. **The recent part crossed the threshold:** its maximum is at least `PRESSURE_THRESHOLD`.
 2. **The lead stayed clearly below it:** the lead's maximum is at most `PRESSURE_BASELINE_FACTOR` times the recent
@@ -3333,7 +3337,7 @@ stored run therefore replays unchanged.
   - Whether the lab's alert rule changes is a lab decision.
 - **The pressure that `evaluate_resource_mechanisms` reads** (the whole read's `peak`).
 
-## 31. A dependency that the symptom's anomalous requests never reached (D1'; owner-approved 2026-10-12, with §31.3)
+## 31. A dependency that the symptom's anomalous requests never reached (D1'; owner-approved 2026-10-12, with §31.3; withdrawn, §31.7)
 
 ### 31.1 Measured problem
 
@@ -3473,3 +3477,82 @@ These are estimates. §31.5 measures them.
      `kafka` answer.
 4. **ITBench-Lite,** as a regression check.
 5. **The twenty-third `HOLDOUT`,** pre-registered separately before it runs, with the hard conditions above.
+
+### 31.6 Result of the offline replay, and condition 4 restated (proposed 2026-10-12)
+
+**The replay of §31.5 step 2** read 553 run databases and 3417 diagnoses with 2.10.0 and with §30 and §31 (2.11.0).
+- **Passed:**
+  - no error;
+  - no root, leader, tier or display change;
+  - every stored `RESOURCE_PRESSURE` finding unchanged (§30 on records read before it);
+  - 3 new `RESOLVED`, all `competing-b`, each led by the run's cause;
+  - none lost.
+- **Answers:** 72 `kafka` questions answered `ANSWERED_NOT_REACHED`.
+- **Failed:** the hard condition "no `ANSWERED_NOT_REACHED` where an anomalous request of the window reached the
+  dependency".
+  - It held over the spans each diagnosis read.
+  - It did not hold over every stored span of the caller: in 4 of the 72 answers, 1 or 2 anomalous requests of the
+    window reached `kafka`. The runs are `holdout20-dependency-b` #0 and #2, `holdout21-dependency-b` #0 and
+    `holdout22-config-b` #2.
+  - Those requests were slow, not failed: `payment-service` answered late, and the request then published. Their
+    calls to `kafka` were not anomalous.
+  - The reads were cut. The diagnoses read 6 to 8 of the window's 21 to 24 anomalous requests.
+
+**The defect is in condition 4, not in a threshold.** "None reached it" is a statement about every anomalous request.
+A cut read sees only a sample of them, so absence in the sample does not carry to the window. The pre-registered
+condition is not reinterpreted: §31 as written failed.
+
+**Amendment: condition 4 is restated.**
+- **It reads:** the dependency is not where the anomalies are. No anomalous request has an anomalous call to the
+  dependency. A call is anomalous as in §31.2.
+- **Otherwise** the question stays `OPEN` with `ANOMALOUS_CALL_TO_IT`.
+- **What the answer says:** in the window, every anomalous request it read failed or slowed at another peer, and none
+  of them failed or slowed at the dependency. A request that reached the dependency with a normal call does not keep
+  the question open.
+- **Names:** the rule becomes `m21.frontier.dependency-not-at-the-anomaly` (v1), its answer
+  `ANSWERED_ANOMALY_ELSEWHERE`. The names of §31.2 are withdrawn; no stored diagnosis carries them.
+
+**Unchanged:** every other condition of §31.2, their order, the window, the baseline, `F`, the three remaining
+uncertainties and §3 I1 and I3.
+
+**The hard condition of §31.3 becomes:** no dependency question is answered `ANSWERED_ANOMALY_ELSEWHERE` when an
+anomalous request of the window had an anomalous call to that dependency.
+- It is checked **over every stored span of the caller**, not only over the spans the diagnosis read.
+- The other hard condition of §31.3 stays: no dependency question is answered when the dependency's own fault slows
+  or fails the symptom's requests (the `DEV` check of §31.5).
+
+**The measurement of §31.5 is run again** with these names and this hard condition, from step 1.
+- The `DEV` runs of step 3 that ran live with §31 as first written are replayed offline with the restated rule, and
+  their hard conditions are judged on that replay. Their live diagnoses are reported.
+- §30 is not changed, so its `DEV` check (§30.4) is judged on the live runs.
+
+### 31.7 Withdrawn (owner decision, 2026-10-12)
+
+**§31 is withdrawn,** with §31.6. No engine carries it. §30 goes on alone.
+
+**The replay of §31.6** read the same 553 run databases and 3417 diagnoses.
+- **Passed:**
+  - no error;
+  - no root, leader, tier or display change;
+  - 4 new `RESOLVED` (3 `competing-b`, 1 `direct-b`), each led by the run's cause;
+  - none lost;
+  - 80 `kafka` questions answered.
+- **Failed:** the hard condition of §31.6, checked over every stored span of the caller.
+  - In 4 of the 80 answers, one request the diagnosis did not read had a call to `kafka` of 2 to 11 ms.
+  - The baseline median of those calls is 0.45 to 0.6 ms, so `F` × the median makes them anomalous.
+  - §31.2 has no absolute floor, unlike §12.6's `D`.
+
+**Why the rule is withdrawn rather than amended again:**
+- **Amended twice on the same data.** The rule would have been amended a second time on the data that showed its
+  failures. That replay can no longer test it.
+- **A universal claim from a sample.** The rule states a fact of every anomalous request of the window, but the
+  diagnosis reads a cut sample of them, 6 to 8 of about 20. A floor removes the noise, not the sample (§3 I1).
+- **The `DEV` check did not test it.** In the kafka delay alone, the delay was the claim's cause, and A answered the
+  `kafka` question (`ANSWERED_ON_CLAIM_PATH`); §31 was never applied.
+
+**What would bring it back** is a design question, not an amendment: a read of the window's anomalous requests that
+is complete, not a sample. Such a read would be a trace capture of its own (live-trace-design). The rule could then
+answer only when that read is not cut. It will be proposed separately, with its own measurement and a `HOLDOUT` not
+yet seen.
+
+**§30 is measured as §30.4 pre-registers it,** steps 1 to 5, without §31's conditions.

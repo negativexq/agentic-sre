@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -170,6 +170,11 @@ class LogRecord(BaseModel):
     evidence_id: str
 
 
+# m21 §30: the resource read starts this long before the baseline gap; its first such span is
+# the lead the recent part is compared with.
+RESOURCE_BASELINE_LEAD = timedelta(minutes=5)
+
+
 class ResourcePressure(BaseModel):
     """Use of one container resource relative to its limit, before and after a time.
 
@@ -189,6 +194,11 @@ class ResourcePressure(BaseModel):
     sample_count: int = Field(default=0, ge=0)
     sample_start: datetime | None = None
     sample_end: datetime | None = None
+    # m21 §30: the maximum of the read's first RESOURCE_BASELINE_LEAD and of the rest, with the
+    # rest's time. None on a record read before §30, and lead_peak None when no sample led.
+    lead_peak: float | None = None
+    recent_peak: float | None = None
+    recent_at: datetime | None = None
 
 
 class TrafficObservation(BaseModel):

@@ -15,6 +15,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from packages.rca.model import (
+    RESOURCE_BASELINE_LEAD,
     EntityRef,
     InvestigationQuery,
     ResourcePressure,
@@ -370,6 +371,15 @@ class PrometheusMetricsReader:
                 baseline = samples[0].value
                 peak = max(sample.value for sample in samples)
                 at = next(sample.at for sample in samples if sample.value == peak)
+                # m21 §30: the read's first RESOURCE_BASELINE_LEAD against the rest of it
+                split = start + RESOURCE_BASELINE_LEAD
+                lead = [sample.value for sample in samples if sample.at < split]
+                recent = [sample for sample in samples if sample.at >= split]
+                lead_peak = max(lead) if lead else None
+                recent_peak = max((sample.value for sample in recent), default=None)
+                recent_at = next(
+                    (sample.at for sample in recent if sample.value == recent_peak), None
+                )
                 evidence_id = _evidence_digest(
                     "resource",
                     {
@@ -395,6 +405,9 @@ class PrometheusMetricsReader:
                         sample_count=len(samples),
                         sample_start=samples[0].at,
                         sample_end=samples[-1].at,
+                        lead_peak=lead_peak,
+                        recent_peak=recent_peak,
+                        recent_at=recent_at,
                     )
                 )
         ordered = sorted(

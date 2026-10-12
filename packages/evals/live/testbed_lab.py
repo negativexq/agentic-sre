@@ -755,6 +755,16 @@ class LabWorld:
                     f'  loss: {{loss: "{params.loss_percent}"}}\n'
                 ),
             )
+        elif params.fault == "kafka-delay":
+            # m21 §31.5 DEV check: the delay on kafka's Pod is the cause itself
+            kind, body = (
+                "NetworkChaos",
+                (
+                    "  action: delay\n  mode: all\n"
+                    f"  selector: {{namespaces: [{NAMESPACE}], labelSelectors: {{app: {DELAYED_DEPENDENCY}}}}}\n"
+                    f"  delay: {{latency: {params.latency_ms}ms}}\n"
+                ),
+            )
         elif params.fault == "decoy-stress":
             # design §12.2.2, `negative-control` variant B: a CPU-stress decoy on the isolated workload
             kind, body = (
@@ -814,6 +824,7 @@ class LabWorld:
         # the pod a pod-kill will remove is known only before it is killed
         app = {
             "pod-kill": "order-worker",
+            "kafka-delay": DELAYED_DEPENDENCY,
             "decoy-delay": "isolated-echo",
             "decoy-stress": "isolated-echo",
         }.get(params.fault, self.target_app)
@@ -1531,6 +1542,12 @@ SPECS: dict[str, Callable[..., ScenarioSpec]] = {
         loss_percent=LOSS,
         dependency_delay_ms=ParameterRange(low=300, high=300),
     )(repeats, seeds, tier=tier),
+    # m21 §31.5 DEV check: a 1 s delay on kafka's Pod alone, large enough to slow order-service's requests
+    "dependency-kafka-delay": lambda repeats, seeds, tier="DEV": _variant_b(
+        dependency_spec,
+        "dependency-delay-kafka",
+        latency_ms=ParameterRange(low=1000, high=1000),
+    )(repeats, seeds, tier=tier),
     # m21 §13.4: the rollout witness's held-out variants, mechanisms variant A did not use
     "config-c": _variant_b(config_spec, "config-error-payment"),
     # m21 §14: the failed rollout's `DEV` scenario, a mechanism the held-out `config-b` (a missing image) does not use
@@ -1563,6 +1580,9 @@ def world_for(
     if "direct-stress-payment" in scenario_ids:
         return LabWorld(clock=clock, target_app="payment-service", payment_probe=True)
     if "scheduled-stress-order" in scenario_ids:
+        return LabWorld(clock=clock, target_app="order-service")
+    if "dependency-delay-kafka" in scenario_ids:
+        # m21 §31.5: kafka answers no HTTP probe; the delay is seen at order-service's publish
         return LabWorld(clock=clock, target_app="order-service")
     if {"config-image-payment", "negative-image-decoy"} & set(scenario_ids):
         return LabWorld(clock=clock, payment_probe=True)

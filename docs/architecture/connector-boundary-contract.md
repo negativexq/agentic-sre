@@ -734,3 +734,21 @@ injection (in the first `HOLDOUT`, for example, an alert ended at 06:47:44, `W�
 - `WIRE_VERSION` stays `connector.v2`: the change is additive.
 - **`preflight`** also reports `trace_fetches`: the totals of requests, joined waiters, HTTP fetches, failures and
   verification differences since the Connector started.
+
+## 19. `query_traces_many`: one slice's targets, each trace fetched once (APPROVED 2026-10-12, live-trace-design §15)
+
+- **The operation:** `query_traces_many` takes `targets` (1 to 8 entity references), one `query` and the optional
+  `capture_scope` of §18.
+- **What the Connector does:**
+  - it runs each target's own search, exactly as `query_traces` would;
+  - it fetches every trace those searches selected once, for the query's range;
+  - it answers each target with the traces its own search selected.
+- **The answer:** `results`, one per target and in the targets' order. Each is either the shape `query_traces`
+  returns, or `{"shape": "failure", "error_type", "message"}`. A failure covers only the targets whose search, or
+  whose selected trace, failed.
+- **Nothing is kept** after the call. The next call fetches again.
+- **Negotiated:**
+  - a Connector that has the operation lists the capability `trace_slice_fetch`;
+  - the client sends it only to such a Connector;
+  - an older Connector is read one target at a time with `query_traces`.
+- `WIRE_VERSION` stays `connector.v2`: the change is additive.

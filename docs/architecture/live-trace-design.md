@@ -616,3 +616,66 @@ depend on the recovery time.
 - **P1:** the per-capture wait summary is an INFO line, and the lab control plane logged only WARNING.
   - The lab control plane now runs with the existing `SRE_LOG_LEVEL=INFO`, and the harness copies the run's
     summary lines into the run directory.
+
+## 15. A slice's services share their trace fetches (P2, 2026-10-12, owner-approved)
+
+### 15.1 Measured problem
+
+**Source:** the twenty-second `HOLDOUT`'s 24 run databases: every trace read, with its fetched trace IDs and spans.
+
+**Logical trace-by-ID fetches:** 29,494, of which 26,854 were CAPTURE and 2,640 were ENGINE.
+
+| Fetch, against everything fetched before it in the run | Share | Returned a span not seen before |
+|---|---|---|
+| First fetch of the trace | 18.3% | — |
+| Same trace and range, same capture | **46.7%** | 0 of 13,770 |
+| Same trace and range, another incident | 17.0% | 0 of 5,035 |
+| Same trace, another range, another incident | 11.8% | 4 of 3,861 |
+| Same trace, another range, same incident (mostly ENGINE) | 4.5% | 0 of 1,323 |
+
+- **Cause: the capture plan.** Each 60 s slice searches each service on its own. A request's trace crosses
+  `order-service`, `payment-service` and `order-worker`, so the three searches select the same traces, and each read
+  fetched them again.
+- **Why P0 missed most of them:** the repeats are sequential, not concurrent. The median gap is 0 s, 99% come within
+  10 s, and the longest is 21.6 s.
+- **The potential, from a simulation:** about 46% fewer trace-by-ID requests and bytes inspected. This is a
+  potential, not a target.
+
+### 15.2 The change
+
+**Each slice is read as one unit:**
+- each service's own search runs, with its own 8-trace limit;
+- every trace the searches selected is fetched once, for the slice's range;
+- each service's read is built from the traces its own search selected;
+- each read is recorded on its own, as before: target, observation, diagnostics and evidence IDs. Its timing is the
+  whole slice call's.
+
+**Unchanged:**
+- **Nothing is kept after the slice.** The next slice, and the next capture, fetch again, so a late span (a Kafka
+  consumer's) is read by the next read, as §14.2 requires.
+- **A failure** fails only the reads that needed it:
+  - a failed search fails its own service's read;
+  - a failed fetch fails the reads whose search selected that trace;
+  - a trace that only failed reads selected is not fetched.
+- **ENGINE reads** still query one target at a time.
+
+**P0 and P1:**
+- **P0:** the slice's fetches still go through the capture's single flight.
+- **P1:** a slice now takes one slot, for its searches and fetches together. Captures still have at most two Tempo
+  requests in flight.
+  - A slice not admitted within the wait fails each of its reads with `TraceReadAdmissionTimeout`.
+  - The capture's summary line counts reads and slices.
+
+**Connector:** `query_traces_many`, negotiated by `trace_slice_fetch` (connector-boundary-contract §19). An older
+Connector is read one service at a time.
+
+**Not in this change:**
+- fetches repeated across incidents;
+- slice boundaries;
+- any reuse of a finished fetch.
+
+**Measured after it:**
+- Tempo HTTP requests;
+- bytes inspected;
+- capture duration and admission waits;
+- evidence equivalence and diagnosis accuracy, against the same scenarios read before it.

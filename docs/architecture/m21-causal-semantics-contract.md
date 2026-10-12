@@ -3298,8 +3298,12 @@ stored run therefore replays unchanged.
 - **The stressed Pods of `direct-b` and `scheduled-b`** keep their finding (§30.1).
 - **On the twenty-second `HOLDOUT` alone,** the 16 `order-service` Pod rivals would go. No diagnosis would become
   `RESOLVED`: each of them still holds an open `kafka` question.
+- **§30 is therefore proposed only together with §31.** The two are implemented in one engine version and measured
+  together (§31.5).
 
 ### 30.4 Measurement, pre-registered
+
+§31.5 runs these with §31's.
 
 1. **Unit tests:**
    - a burst in the lead and a recent maximum below the factor: no finding;
@@ -3321,10 +3325,151 @@ stored run therefore replays unchanged.
 
 ### 30.5 Not decided here
 
-- **The `kafka` questions of the `order-service` claims.** They are the remaining blocker of those diagnoses (a
-  separate proposal, D1').
+- **The `kafka` questions of the `order-service` claims.** They are the remaining blocker of those diagnoses. §31
+  takes them up.
 - **The `order-worker` lag alerts.**
   - The rule `increase(produced[2m]) − increase(consumed[2m]) > 10` already reads 4 to 9 under normal traffic.
   - It jumps to 27–68 when traffic stops. The traces show every sampled message consumed in about 1 ms.
   - Whether the lab's alert rule changes is a lab decision.
 - **The pressure that `evaluate_resource_mechanisms` reads** (the whole read's `peak`).
+
+## 31. A dependency that the symptom's anomalous requests never reached (D1'; proposal, 2026-10-12, awaiting the owner)
+
+### 31.1 Measured problem
+
+**Source:** the twenty-second `HOLDOUT`'s 30 diagnoses behind `order-service` alerts.
+
+**Every one of them holds an open `kafka` question,** `CALLED`.
+- `order-service` publishes to kafka, so C cannot answer it.
+- A does not apply, because kafka is off the claims' paths.
+- B is withdrawn (§29.9).
+- Once §30 removes the Pod rivals, this question is the only blocker of most of these diagnoses (§31.4).
+
+**The request.** `order-service` handles `POST /orders` in this order: `postgres` create, the `payment-service` call,
+`postgres` update, then the kafka publish. The publish waits for the broker (`flush`).
+- When the payment call fails, the request ends before the publish.
+- When it is slow but succeeds, the request goes on to the publish.
+
+**What the runs recorded.** For each diagnosis: the `POST /orders` requests that began in `[onset, onset + 1 min]`,
+with only the spans the incident's last diagnosis had. A request is anomalous when it is `ERROR` or slower than 2×
+the median before the onset. (2× is the analysis's factor; §31.2 uses §12.6's 3.)
+
+| Runs | Anomalous requests per diagnosis | They reached kafka | Each has an anomalous call elsewhere |
+|---|---|---|---|
+| `dependency-b`, `config-b`, `config-c`, `competing-b` (21) | 11–34 | **0** in 20; 2 in 1 (`config-b` #2) | yes, `payment-service`, in all |
+| `direct-b` (4) | 10–21 | yes | yes, `payment-service` |
+| `scheduled-b` (5) | 8–25 | yes, and the kafka calls are slower too | yes |
+| `dev20`, `dev20b`, `dev21` kafka delay (6) | 6–18 | **0** | yes, `payment-service` |
+
+- **While each fault was active, no kafka publish happened at all** in `dependency-b`, `config-b`, `config-c` and
+  `competing-b`. Prometheus's counters show the same, independently of the trace sample.
+- **The publishes after the alert all came after the fault was removed.** That is why B's "healthy calls" could not
+  be read.
+- **At the first diagnosis the window is not yet complete.** The minute before the onset holds requests in
+  transition: slow ones that still reached kafka. It is not used.
+
+### 31.2 Amendment
+
+**`m21.frontier.dependency-not-reached-by-anomaly` (v1), answer `ANSWERED_NOT_REACHED`.**
+- **Scope:** it is applied after A and C to the `dependency` questions still `OPEN` with `CALLED`.
+- **The caller** is each workload whose `calls` edge raised the question, as in C. Every caller must meet the
+  conditions.
+- **Its requests** are its own `SERVER` spans.
+- **A request's calls** are the caller's `CLIENT` and `PRODUCER` spans below that request in its trace, through the
+  caller's own spans.
+- **A call goes to a dependency** only by §29.6: its `server.address` is a host the caller declares for that Service.
+- **The window** is `[onset, onset + 1 min]`, the trace capture's slice (`TRACE_SLICE`).
+- **The baseline** is `[onset − 10 min, onset − 5 min]`, §12.7's window.
+- **A request is anomalous** when its status is `ERROR`, or its duration is above `F` × the median of the caller's
+  requests in the baseline. `F` is 3 (§12.6).
+- **A call is anomalous** when its status is `ERROR`, or its duration is above `F` × the median of the calls to the
+  same peer (`server.address`) in the baseline. A call whose peer has no baseline call is anomalous only when it is
+  `ERROR`.
+
+All of these must hold:
+1. **The window is complete.** The diagnosis's cutoff is at or after `onset + 1 min`. Otherwise
+   `WINDOW_NOT_COMPLETE`.
+2. **The baseline exists.** The caller has at least 3 requests in the baseline. The 3 is §12.5's. Otherwise
+   `NO_BASELINE`.
+3. **Enough anomalous requests.** At least 3 of the caller's requests in the window are anomalous. Otherwise
+   `TOO_FEW_ANOMALOUS_REQUESTS`.
+4. **None reached the dependency.** No anomalous request has a call to it. Otherwise `REACHED`.
+5. **Each anomaly is located elsewhere.** Every anomalous request has an anomalous call to another peer. Otherwise
+   `ANOMALY_NOT_LOCATED`.
+6. **Its calls are traced.** As C's condition 2 (§29.6): every span of the caller that is neither `SERVER` nor
+   `CONSUMER` carries `server.address`. Otherwise `CALLS_NOT_TRACED`.
+7. **Nothing is missing.** No trace read of the caller's service is `FAILED` for the incident. `TRUNCATED` is not a
+   failed read (§29.8). Otherwise `TRACE_READ_FAILED`.
+
+**What the answer says, and what it does not:**
+- It says: in the window, the symptom's anomalous requests failed or slowed at another peer, and none of them reached
+  the dependency.
+- It says nothing about the dependency's health.
+- It keeps three remaining uncertainties:
+  - `AN_EFFECT_OUTSIDE_THE_REQUESTS` (for example, a resource shared inside the caller);
+  - `ANOMALIES_OUTSIDE_THE_WINDOW`;
+  - `THE_SAMPLE_OF_A_CUT_READ`.
+
+**A bounded reading of absence (§3 I1),** as C's.
+- Condition 4 reads that no call to the dependency was made.
+- Condition 6 makes such a call visible if it had been made, and condition 7 ensures no read was lost.
+- The rule never excludes or contradicts a claim. It answers the question for the claims of the incident only.
+
+**No name is read (§3 I3).** The rule reads span kinds, the trace's parent structure, status, durations and
+`server.address` against the caller's declaration.
+
+**Unchanged:** A, C, §29.6, B's withdrawal, every other rule and every other condition of `RESOLVED`.
+
+### 31.3 The decision this section asks for
+
+**§29.4's hard condition was:** "under a kafka delay, no kafka question may be answered."
+
+**§31 answers kafka in `dev20`, `dev20b` and `dev21`.** There the anomalous requests failed at `payment-service` and
+never reached kafka, although kafka was delayed. The answer is true of those symptoms. It is not a claim that kafka
+was healthy.
+
+**The proposed hard condition:**
+- No dependency question is answered `ANSWERED_NOT_REACHED` when an anomalous request of the window reached that
+  dependency.
+- No dependency question is answered when the dependency's own fault slows or fails the symptom's requests. This is
+  checked by the `DEV` check of §31.5.
+
+### 31.4 Consequences, estimated
+
+**On the twenty-second `HOLDOUT`, at the incidents' last diagnosis,** estimated with the analysis's 2× factor:
+- **Estimated answers:**
+  - With §31 alone, the `kafka` question would be answered in up to 20 of the 30 `order-service` diagnoses:
+    `dependency-b`, `config-b`, `config-c` and `competing-b`.
+  - It would stay open in `direct-b` and `scheduled-b` (`REACHED`).
+- **Estimated `RESOLVED`:**
+  - With §30, up to **17 of the 30** would become `RESOLVED`: `dependency-b` 6, `config-b` 5 and `competing-b` 6.
+  - `config-c` keeps `NOT_ON_EVERY_CLAIM_PATH`.
+  - Without §30, about 3 would.
+- **The first diagnosis does not change** (`WINDOW_NOT_COMPLETE`).
+- **The `order-worker` lag alerts do not change.** Their caller has no `SERVER` span, so condition 2 fails. They stay
+  `OPEN`.
+
+These are estimates. §31.5 measures them.
+
+### 31.5 Measurement of §30 and §31, pre-registered
+
+1. **Unit tests** of each condition of §30 and §31 in turn.
+   - **Hard:** a request that reached the dependency is never `ANSWERED_NOT_REACHED`.
+2. **Offline replay** of every stored run, 2.10.0 against the engine with §30 and §31. §31 reads the stored traces;
+   §30 changes no stored run.
+   - **Hard:**
+     - no root, leader, tier or display change;
+     - no new `RESOLVED` whose leader is not the run's cause or its execution instance;
+     - no `ANSWERED_NOT_REACHED` where an anomalous request of the window reached the dependency.
+   - **Reported:**
+     - every answer with its rule and evidence;
+     - every question left open with its condition;
+     - every new `RESOLVED`.
+3. **`DEV` checks, unscored.** Each check's harness goes in its own commit.
+   - **A kafka delay alone, large enough to slow `order-service`'s requests** (the existing `NetworkChaos` on kafka's
+     Pod, 1 s). Hard: no `kafka` question answered `ANSWERED_NOT_REACHED`.
+   - **`direct-b` and `scheduled-b`.** Hard: the stressed Pod keeps its `RESOURCE_PRESSURE` finding (§30.4).
+   - **`dependency-b` and `negative-b`.** Reported: every `RESOURCE_PRESSURE` finding, every Pod rival and every
+     `kafka` answer.
+4. **ITBench-Lite,** as a regression check.
+5. **The twenty-third `HOLDOUT`,** pre-registered separately before it runs, with the hard conditions above.

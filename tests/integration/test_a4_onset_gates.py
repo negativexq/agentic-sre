@@ -37,7 +37,7 @@ def _covered_run(world: Any) -> tuple[str, DiagnosisRow]:
 def test_the_frozen_boundary_replays_the_same_onset_and_digest(setup: Any) -> None:  # noqa: F811
     factory, *_ = setup
     run_id, row = _covered_run(setup)
-    assert row.engine_version == RCA_ENGINE_VERSION == "2.11.0"
+    assert row.engine_version == RCA_ENGINE_VERSION == "2.12.0"
     assert row.document["symptoms"]["onset_basis"] == ONSET_ANCHORED
     replayed = build_case(ReplaySource.from_run(run_id, session_factory=factory), EngineConfig())
     assert replayed.symptoms.onset is not None
@@ -47,13 +47,19 @@ def test_the_frozen_boundary_replays_the_same_onset_and_digest(setup: Any) -> No
     assert replay_run(run_id, "base", session_factory=factory) == row.epistemic_digest
 
 
-def test_a_run_recorded_by_engine_1_2_2_is_unsupported_under_2_0_0(setup: Any) -> None:  # noqa: F811
+@pytest.mark.parametrize("recorded_version", ["1.2.2", "2.11.0"])
+def test_an_older_engine_run_is_not_silently_reinterpreted(
+    setup: Any,  # noqa: F811
+    recorded_version: str,
+) -> None:
     factory, *_ = setup
     run_id, _ = _covered_run(setup)
     with factory() as session:
         session.execute(
-            update(DiagnosisRow).where(DiagnosisRow.run_id == run_id).values(engine_version="1.2.2")
+            update(DiagnosisRow)
+            .where(DiagnosisRow.run_id == run_id)
+            .values(engine_version=recorded_version)
         )
         session.commit()
-    with pytest.raises(ReplayEngineIncompatible, match="1.2.2"):
+    with pytest.raises(ReplayEngineIncompatible, match=recorded_version):
         replay_run(run_id, "base", session_factory=factory)

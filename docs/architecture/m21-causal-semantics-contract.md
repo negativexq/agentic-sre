@@ -1,6 +1,6 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v3`; engine `2.2.0` (2.1.0 until 2026-10-05, roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; current engine `2.12.0` (§33; version policy in roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and
@@ -3720,3 +3720,34 @@ runs in parentheses.
 - The instrumentation measurement, alert coverage and the old-revision Pods (§32.6).
 - **C's precision limit** and **the twenty-third `HOLDOUT`** on engine 2.11.0 (§30.4 step 5): separate tracks.
 - **The `order-worker` lag alerts** (157 of the 247): their artifact criteria are fixed first.
+
+## 33. Unknown readiness is not a sole-ready proof (owner-authorized correction, 2026-10-12)
+
+This corrects §28 condition 2 and §3 I1. It does not implement §32 or collective
+replica coverage, change the meaning of Service alarm scope, or change C.
+
+`m21.resolution.sole-ready-pod` v2, engine **2.12.0**: each selected Pod other than
+the witnessed one must have a known `ready=False` state at or before execution
+start. All records tied at the latest such observation time must agree. No record,
+future-only records, unknown state or a conflicting tie denies the Pod/Service
+coverage bridge. Unknown readiness observed during the interval, including a
+later observation whose transition time overlaps it, also denies the bridge.
+The existing exclusions for a ready competitor and the target-record requirement
+remain unchanged. The correction can remove coverage, never grant new coverage.
+
+Direct witness scope and workload ownership coverage remain. A denied bridge does
+not change root support or execution witnesses. Other prerequisites of `RESOLVED`
+and normal replay's engine-version refusal remain unchanged. The helper has no
+stream-gap input; this correction is not a claim of complete membership or ledger
+continuity. The witness's execution interval is the interval assessed here.
+
+**Paired measurement before the production edit:** 559 databases, 7,945 frozen
+runs (all persisted diagnoses plus each incident's widest evidence window), zero
+errors. 28 runs lose an unsupported sole-ready bridge, all because the competitor's
+state at execution start is unknown. No root, support, witness, display, digest or
+resolution change: all 101 recalculated `RESOLVED` revisions remain `RESOLVED`.
+The comparable widest population is 3,444 windows: 23 bridge denials and 54/54
+resolutions retained. No stored record is overwritten or relabeled.
+
+Details, denial records, reproduction and limits:
+[`sole-ready-correction.md`](sole-ready-correction.md).

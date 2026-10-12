@@ -1184,13 +1184,26 @@ def _sole_ready(
     start: datetime,
     end: datetime,
 ) -> bool:
-    """m21 §28: the ledger shows ``pod`` and no other of ``others`` possibly ``Ready`` in ``[start, end]`` (§23's test)."""
+    """m21 §28/§33: unknown selected replicas cannot prove a sole server."""
     if not any(status.pod == pod for status in statuses):
         return False
     for other in others:
         if other == pod:
             continue
         observations = [status for status in statuses if status.pod == other]
+        # A missing/future record is not evidence that the other replica was unready.
+        at_start = [status for status in observations if status.observed_at <= start]
+        latest_at = max((status.observed_at for status in at_start), default=None)
+        latest = [status for status in at_start if status.observed_at == latest_at]
+        if not latest or any(status.ready is not False for status in latest):
+            return False
+        if any(
+            status.ready is None
+            and status.observed_at >= start
+            and (status.ready_since or status.observed_at) <= end
+            for status in observations
+        ):
+            return False
         if any(
             status.ready is True
             and status.observed_at >= start

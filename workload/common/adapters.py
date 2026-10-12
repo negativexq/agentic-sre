@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from opentelemetry import context as otel_context
 from opentelemetry import propagate, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
@@ -157,16 +158,65 @@ class KafkaEventPublisher:
                 "server.address": self._server_address,
             },
         )
-        with span_context:
-            self._producer.produce(
-                topic.value,
-                key=str(event.order_id),
-                value=event.model_dump_json(),
-                headers=list(headers.items()),
-            )
-            self._producer.flush()
+        with span_context as span:
+            # The producer is shared by every request thread: this message's delivery report may be served by
+            # another request's flush(), so it carries this publish's own span and context, never the active one.
+            report = self._delivery_report(topic, span, otel_context.get_current())
+            try:
+                self._producer.produce(
+                    topic.value,
+                    key=str(event.order_id),
+                    value=event.model_dump_json(),
+                    headers=list(headers.items()),
+                    on_delivery=report,
+                )
+            except Exception:
+                # BufferError (local queue full) or KafkaException: the request fails, as before
+                if self._runtime is not None:
+                    self._runtime.metrics.kafka(
+                        self._runtime.service_name, topic.value, "produce_failed"
+                    )
+                raise
+            # flush() waits for the whole shared queue, not only this message
+            remaining = self._producer.flush()
+            if isinstance(remaining, int) and remaining > 0 and span is not None:
+                span.set_attribute("messaging.kafka.flush.remaining", remaining)
         if self._runtime is not None:
+            # "produced" keeps its meaning (produce and flush returned); the delivery outcome is counted apart
             self._runtime.metrics.kafka(self._runtime.service_name, topic.value, "produced")
+
+    def _delivery_report(
+        self, topic: EventTopic, span: Any, origin: otel_context.Context
+    ) -> Callable[[Any, Any], None]:
+        runtime, server_address = self._runtime, self._server_address
+
+        def report(error: Any, message: Any) -> None:
+            del message
+            if runtime is None:
+                return
+            if error is None:
+                runtime.metrics.kafka(runtime.service_name, topic.value, "delivered")
+                return
+            runtime.metrics.kafka(runtime.service_name, topic.value, "delivery_failed")
+            name = error.name() if callable(getattr(error, "name", None)) else type(error).__name__
+            if span is not None and span.is_recording():
+                span.set_status(Status(StatusCode.ERROR, f"delivery failed: {name}"))
+                span.set_attribute("error.type", name)
+            token = otel_context.attach(origin)
+            try:
+                runtime.logger.error(
+                    f"dependency.request error: kafka delivery failed: {name}: {error}",
+                    extra={
+                        "messaging.system": "kafka",
+                        "messaging.destination.name": topic.value,
+                        "server.address": server_address,
+                        "error.type": name,
+                    },
+                )
+            finally:
+                otel_context.detach(token)
+
+        return report
 
 
 class LazyKafkaEventPublisher:

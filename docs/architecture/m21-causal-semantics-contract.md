@@ -3556,3 +3556,167 @@ answer only when that read is not cut. It will be proposed separately, with its 
 yet seen.
 
 **§30 is measured as §30.4 pre-registers it,** steps 1 to 5, without §31's conditions.
+
+## 32. A rollout's effect at its own target service (proposed 2026-10-12; not approved, not implemented)
+
+### 32.1 Measured problem
+
+**Source:** the recent era (nineteenth to twenty-second `HOLDOUT`, `DEV` 19–23), 488 diagnoses, of which 247 hold no
+strong witness. All of these runs are development data now; nothing below validates a rule.
+
+**49 of the 247 (20 runs) have no applicable witness route because the symptom is the target's own service.**
+- All 49 are Deployment rollouts: `negative-dbdelay-decoy` 27 (9 runs), `config-error-payment` 22 (11 runs).
+- Each diagnosis has one alert, `payment-service`'s own: `HighErrorRate`, `PaymentErrorRateHigh`,
+  `HighRequestLatency`, `PaymentRequestLatencyHigh` or `PaymentDbQueryLatencyHigh`.
+- `_rollout_effect_witnesses` reads the effect at a **caller** of the target and skips a symptom that is the
+  target's own service. No route reads the target service's own requests.
+- Their symptom scope is the Deployment, the Service, the new revision's Pod and the two Pods of the old revision.
+
+**Scope.** Every measured case is a rollout, so this section is limited to rollouts (§13). Chaos kinds, network
+faults among them, are not covered here.
+
+### 32.2 The question
+
+> While the change was executing at its exact target Pod, was the effect that makes up the incident's symptom of
+> that same service observed?
+
+A witness answers it only when every condition of §32.3 holds. Otherwise there is no witness; the reason is recorded.
+
+### 32.3 Proposed conditions
+
+**R1. The existing gates stay.** D1 has fired; the claim has its actor instance (UID) and its episode onset; §13's
+rollout execution holds: the change origin, the ReplicaSet created within `ROLLOUT_REPLICASET_WINDOW` and owned by
+the Deployment's UID, and a Pod owned by that ReplicaSet present at the onset. That Pod is the target; its interval is
+`[its creation, its deletion or the cutoff]`.
+
+**R2. The span's Pod is bound to an exact instance only through the journal.** A span names its Pod
+(`k8s.pod.name`), not its UID. The name is resolved by §21 Rule B: exactly one UID holds the name over the whole
+interval. This is identity resolution, not a rule keyed on a name (§3 I3). A reused name, a missing journal record or
+more than one holder gives no exact-instance authority, and no witness.
+
+**R3. The effect is §12.2's, read at the target's own requests.**
+- **Effect calls:** the target service's `SERVER` spans at the exact Pod that began inside the interval. Health,
+  metrics and fault-control routes are excluded.
+- **Baseline calls:** the same service's `SERVER` spans, any Pod, that began in §16's baseline before the change.
+- **Effect:** non-success (status `ERROR` or HTTP ≥ 500) in the effect calls and none in the baseline; or the effect
+  calls' median above `F` × the baseline median and above `D`. `N`, `F`, `D` are `SERVICE_EFFECT`'s (3, 3, 0.2 s).
+  Fewer than `N` calls on a side, or a baseline median above `D`: unknown, no witness.
+
+**R4. The effect is separated from a dependency's.** Time overlap is not enough: a slow or failing dependency makes
+the same picture at the target's own requests. Both must hold:
+1. **Not inside a captured child call.** No child call of an effect span is non-success, and the union of the child
+   intervals (clipped to the span) covers less than half of the excess (the span's duration minus the baseline
+   median). The union is used, never the sum of child durations: parallel or nested calls would be counted twice.
+2. **A sibling control.** Another Pod of the same service served at least `N` calls in the time range of the effect
+   calls, none with the effect. A dependency fault would have reached it as well.
+
+No sibling: no witness. A normal captured call to a dependency inside the effect span (**in-span control**) is
+recorded as a supporting observation only. It does not exclude another, uninstrumented operation on the same
+dependency: in the lab's `payment-service` the delayed `pg_sleep` runs before the instrumented
+`postgres payment create` span (`workload/payment_service/app.py`), and an effect span with no child at all cannot be
+told from a failure before the first instrumented call, such as the connection acquisition.
+
+**Remaining self time is a supporting observation only.** It is not evidence of CPU or of any local mechanism: it may
+be queueing, a lock, or an uninstrumented call. The witness's `missing` keeps `CHANGED_FIELD_CONSUMPTION_NOT_OBSERVED`.
+
+**R5. The witness carries only the coverage it proves.**
+- Its symptom is the target Pod, if that Pod is a symptom; its owners follow by §27.
+- **The Service** is covered by this witness only when the alert that puts it in scope is **matched**: the alert's
+  expression aggregates the measurement the spans carry (same service, same route filter, request outcome), and the
+  target's captured non-success spans ending in the alert's rule window (`[starts_at − for − range −
+  evaluation_interval, starts_at]`) alone exceed the rate threshold over one range. Captured spans are a lower bound
+  of the requests, so the bound holds under sampling.
+- **A mean-latency alert is not matched by spans.** A sampled mean is not the alert's mean, even at a sole `Ready`
+  Pod: requests that were not read may differ. Matching it needs a metric-to-trace correspondence, a separate design
+  (§32.8).
+- **Not matched:** a mean-latency alert, a metric no span measures (for example
+  `db_query_duration_seconds{operation="create"}`, which also times the uninstrumented query), or no captured span in
+  the window. The effect is recorded in the witness; `missing` gains `ALERT_SPAN_MATCH_NOT_SHOWN`; the Service is
+  not covered by it.
+- **§28 is unchanged.** One Pod's witness among several possibly `Ready` replicas never covers the Service through
+  §28.
+
+**R6. Missing evidence gives no certainty.** No captured span, a capture limit, a failed read or a sampled trace never
+makes a condition true. Each leaves the condition unknown and gives no witness (§3 I1).
+
+### 32.4 Negative controls
+
+Each must give no witness, or no coverage where stated.
+
+| # | Control | Expected |
+|---|---|---|
+| NC1 | The new Pod is normal after the change | no witness (R3) |
+| NC2 | The symptom began before the change | no witness (R3: the effect is in the baseline) |
+| NC3 | The effect is also at an old-revision Pod | no witness (R4 2) |
+| NC4 | A concurrent dependency fault (for example a `postgres` delay) | no witness (R4) |
+| NC5 | A normal rollout, no fault | no witness (R3) |
+| NC6 | Several replicas, the effect at one | the witness does not cover the Service through §28 |
+
+### 32.5 The 49 development diagnoses against §32.3
+
+Offline, from the stored runs and engine 2.11.0's own inputs; no engine code changed. Each class below is exclusive;
+runs in parentheses.
+
+**R1 to R4:**
+
+| Outcome | Diagnoses (runs) |
+|---|---|
+| R1–R4 hold | 0 |
+| A condition fails (an observation contradicts it) | 0 |
+| Insufficient evidence | 49 (20) |
+| — R4: effect spans with no child call, no sibling (`config-error`) | 22 (11) |
+| — R4: no sibling calls in the effect's time range (`dbdelay`) | 27 (9) |
+
+- **R1–R3 hold in all 49:** each has one new-revision Pod, resolved to one UID; the effect is non-success
+  (`config-error`, 22) or latency (`dbdelay`, 27, median 0.7–1.5 s against a baseline of about 3 ms); no effect in
+  the baseline.
+- **No sibling control:** while the new Pod's effect lasts, the old revision's Pods received at most 1 captured call.
+- **Supporting observations, not conditions:**
+  - `config-error`: the requests fail in 1.5 to 3.2 ms with no child call.
+  - `dbdelay`: 18 of 27 hold a normal `postgres` call inside every effect span (child union 0.2–0.6 % of the
+    excess); the time is spent in the uninstrumented `pg_sleep`. In the other 9 the baseline holds no captured
+    `postgres` call to compare with.
+
+**R5 (the alert, one per diagnosis), read for all 49 whatever R4's outcome:**
+
+| Family | Alert match | Diagnoses |
+|---|---|---|
+| `config-error` | rate threshold exceeded by the target's captured errors alone | 16 |
+| `config-error` | no captured span in the alert's window | 6 |
+| `dbdelay` | mean-latency alert, not matchable by spans | 12 |
+| `dbdelay` | a metric no span measures (`PaymentDbQueryLatencyHigh`) | 6 |
+| `dbdelay` | no captured span in the alert's window | 9 |
+
+**What would remain if R4 held.** Not a forecast: R4 holds nowhere.
+- `config-error`: the two old-revision Pods in every case, and the Service in the 6 without a match.
+- `dbdelay`: the two old-revision Pods and the Service in every case.
+- Removing the old-revision Pods from the scope would therefore still leave the Service uncovered in 33 of 49.
+
+### 32.6 Open design questions
+
+1. **A sibling-free control for R4.** Instrumenting the operations that are now invisible (the connection
+   acquisition, the delayed query) would let the effect be placed inside or outside a dependency call. This is a
+   separate instrumentation measurement: what each workload leaves uninstrumented, and whether the 49's effect falls
+   in it.
+2. **Alert coverage.** A metric-to-trace correspondence for mean-latency alerts and for metrics no span measures; a
+   separate design.
+3. **The old-revision Pods in the symptom scope.** A legitimate question, but a separate design: removing them alone
+   leaves the Service uncovered (§32.5).
+
+### 32.7 Acceptance, fixed before any new run
+
+1. **Unit tests:** R1–R6 and NC1–NC6, each with a case that holds and a case that fails.
+2. **Offline replay** of every stored run. **Hard:** no new witness whose actor is not the run's cause; no new
+   `RESOLVED` whose leader is not the run's cause or its execution instance. Reported: every new witness and its
+   coverage.
+3. **`DEV` checks, unscored,** new scenarios for NC4 (a rollout and a concurrent `postgres` delay), NC5 (a rollout
+   with no fault) and NC6 (two replicas, the change failing one). **Hard:** NC4 and NC5 give no witness; NC6 gives no
+   Service coverage through §28.
+4. **A `HOLDOUT`,** pre-registered separately before it runs. The 49 are not used for it.
+
+### 32.8 Not decided here
+
+- Chaos kinds and network faults at their own target service.
+- The instrumentation measurement, alert coverage and the old-revision Pods (§32.6).
+- **C's precision limit** and **the twenty-third `HOLDOUT`** on engine 2.11.0 (§30.4 step 5): separate tracks.
+- **The `order-worker` lag alerts** (157 of the 247): their artifact criteria are fixed first.

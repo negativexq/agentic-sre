@@ -9,6 +9,7 @@ from uuid import UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 from prometheus_client import make_asgi_app
 from prometheus_client.registry import CollectorRegistry
@@ -94,6 +95,8 @@ class OrderService:
             if self._fault_config.error:
                 raise RuntimeError("injected order failure")
         order_id = self._id_factory()
+        # joins the caller's record of this request to the order's rows (independent counting channel)
+        trace.get_current_span().set_attribute("app.order.id", str(order_id))
         with self._repository_factory() as session:
             query_started = time.perf_counter()
             order_repository = OrderRepository(session)

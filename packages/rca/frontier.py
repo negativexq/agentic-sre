@@ -366,14 +366,14 @@ def material_frontier(
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
 DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
 DEPENDENCY_DECLARED_UNUSED_RULE = "m21.frontier.dependency-declared-unused"
-DEPENDENCY_NOT_AT_THE_ANOMALY_RULE = "m21.frontier.dependency-not-at-the-anomaly"
+DEPENDENCY_NOT_REACHED_RULE = "m21.frontier.dependency-not-reached-by-anomaly"
 ANSWERED_STATES = frozenset(
     {
         "ANSWERED_ROLE_TRANSFERRED",
         "ANSWERED_NO_CHANGE_IN_WINDOW",
         "ANSWERED_ON_CLAIM_PATH",
         "ANSWERED_DECLARED_UNUSED",
-        "ANSWERED_ANOMALY_ELSEWHERE",
+        "ANSWERED_NOT_REACHED",
     }
 )
 # Rules whose open answer names a condition of the evidence, which no read of the investigation changes
@@ -382,7 +382,7 @@ EVIDENCE_RULES = frozenset(
         UNCHANGED_CONFIGURATION_RULE,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
         DEPENDENCY_DECLARED_UNUSED_RULE,
-        DEPENDENCY_NOT_AT_THE_ANOMALY_RULE,
+        DEPENDENCY_NOT_REACHED_RULE,
     }
 )
 # span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)
@@ -592,7 +592,7 @@ def dependency_declared_unused(
     )
 
 
-def dependency_not_at_the_anomaly(
+def dependency_not_reached_by_anomaly(
     alternative: StructuralAlternative,
     latest: Mapping[EntityRef, ObjectVersion],
     spans: Sequence[TraceSpanObservation],
@@ -600,7 +600,7 @@ def dependency_not_at_the_anomaly(
     onset: datetime | None,
     cutoff: datetime | None,
 ) -> FrontierAnswer | None:
-    """m21 §31 (condition 4 as §31.6): a called dependency where none of the symptom's anomalies is, each located elsewhere.
+    """m21 §31: a called dependency the symptom's anomalous requests never reached, their anomalies located elsewhere.
 
     The caller's requests are its ``SERVER`` spans; a request's calls are the caller's ``CLIENT`` and ``PRODUCER``
     spans below it through the caller's own spans, attributed by §29.6. A request or call is anomalous when it is
@@ -633,7 +633,7 @@ def dependency_not_at_the_anomaly(
             )
             if reason is None
             else ("UPSTREAM_ROLE_UNDETERMINED",),
-            rule_id=DEPENDENCY_NOT_AT_THE_ANOMALY_RULE,
+            rule_id=DEPENDENCY_NOT_REACHED_RULE,
         )
 
     if cutoff < window_end:
@@ -641,7 +641,7 @@ def dependency_not_at_the_anomaly(
     failed: list[tuple[int, str]] = []
     evidence: list[str] = []
     for caller in callers:
-        result = _caller_anomaly_elsewhere(
+        result = _caller_not_reached(
             [span for span in unique.values() if span.service == caller.name],
             hosts[caller],
             (base_from, base_to),
@@ -660,10 +660,10 @@ def dependency_not_at_the_anomaly(
         for caller in callers
     ):
         return answer("OPEN", "TRACE_READ_FAILED")
-    return answer("ANSWERED_ANOMALY_ELSEWHERE", None, evidence)
+    return answer("ANSWERED_NOT_REACHED", None, evidence)
 
 
-def _caller_anomaly_elsewhere(
+def _caller_not_reached(
     own: Sequence[TraceSpanObservation],
     hosts: frozenset[str],
     baseline: tuple[datetime, datetime],
@@ -725,12 +725,11 @@ def _caller_anomaly_elsewhere(
 
     made = {request.span_id: below(request) for request in flagged}
     if any(
-        (peer := span.semantic_attributes.get("server.address")) in hosts
-        and anomalous(span, peer_typical.get(peer))
+        span.semantic_attributes.get("server.address") in hosts
         for request_calls in made.values()
         for span in request_calls
     ):
-        return (4, "ANOMALOUS_CALL_TO_IT")
+        return (4, "REACHED")
     evidence: list[str] = []
     for request in flagged:
         located = [
@@ -770,14 +769,14 @@ def investigation_status(
 __all__ = [
     "ANSWERED_STATES",
     "DEPENDENCY_DECLARED_UNUSED_RULE",
-    "DEPENDENCY_NOT_AT_THE_ANOMALY_RULE",
+    "DEPENDENCY_NOT_REACHED_RULE",
     "DEPENDENCY_ON_CLAIM_PATH_RULE",
     "EVIDENCE_RULES",
     "UNCHANGED_CONFIGURATION_RULE",
     "apply_frontier_progress",
     "covered_frontier_dimensions",
     "dependency_declared_unused",
-    "dependency_not_at_the_anomaly",
+    "dependency_not_reached_by_anomaly",
     "dependency_on_claim_path",
     "derive_structural_frontier",
     "investigation_status",

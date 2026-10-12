@@ -1,6 +1,6 @@
 # M21 Causal Semantics Contract — actor-specific claims
 
-Contract version: `m21.v3`; current engine `2.12.0` (§33; version policy in roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
+Contract version: `m21.v3`; current engine `2.13.0` (§34; version policy in roadmap F1); D1 remains `m21.support.change-onset-path.v2`.
 Authorized replacement of the conflicting frozen v1 clauses, 2026-09-28.
 The v2 clauses below govern current code. The original v1 text is retained below
 as historical rationale; its default competition, D1 audit-only, dominance and
@@ -3751,3 +3751,41 @@ resolutions retained. No stored record is overwritten or relabeled.
 
 Details, denial records, reproduction and limits:
 [`sole-ready-correction.md`](sole-ready-correction.md).
+
+## 34. The only server is shown by the journal's replicas (owner-approved correction, 2026-10-12)
+
+This corrects §23.2 condition 3 under §3 I1 and I3, as §33 corrected §28. It changes no other part of §23, of §12
+or of any coverage rule.
+
+**Measured problem.** `other_server_ready` read the workload's other pods from the lifecycle ledger alone, choosing
+them by name (`pod.rsplit("-", 2)[0]`). A replica the ledger never observed was not considered, so its readiness was
+taken as "not `Ready`". That is a missing record treated as exclusion (I1), and a population chosen by name (I3).
+
+**Amendment** (engine **2.13.0**). `T` is the only server only when all of these hold:
+1. **The ledger holds `T`.** Otherwise unknown.
+2. **The journal places `T` and its workload by UID.** Exactly one UID holds `T`'s name at some time in the interval;
+   that version names its owning ReplicaSet; the ReplicaSet's record is in the journal. The workload is the
+   ReplicaSet's own owner, else the ReplicaSet. Otherwise unknown.
+3. **The replicas** are the journal's pods owned by any ReplicaSet of that workload, other than `T`'s UID, present at
+   some time in the interval (creation to deletion). Names confer nothing.
+4. **Each replica is shown not `Ready`.** `Ready` in the interval, or `Ready` at its last observation before it:
+   another server (the form fails, as before). Otherwise each needs a known not-`Ready` state at or before the
+   interval's start, all records tied at the latest such time agreeing, and no unknown state during the interval.
+   A replica without such records leaves the form unknown.
+
+The interval is unchanged: the baseline's start to the execution's end.
+
+**Limits.** The journal's pod population is assumed, not proven complete: a pod the journal never recorded is not
+found. A ledger pod the journal cannot place is ignored rather than placed by name. Closing that boundary needs
+stream continuity evidence and is not part of this correction.
+
+**Paired measurement before the edit.** The 2.12.0 predicate, frozen, against this one, on 559 databases and 7,945
+frozen runs (every persisted diagnosis run plus each incident's widest evidence window, 3,444), read-only. Zero
+errors. 534 calls in which 2.12.0 found no other ready replica: the journal proves all 534 (no other replica present).
+No root, support, witness, tier, digest or resolution change in any run; 101/101 `RESOLVED` revisions, and 54/54 in
+the widest windows, remain `RESOLVED`.
+
+**Tests.** New: the journal holding only `T`; no journal; a replica without a readiness record; a replica of another
+revision found by ownership, not name; a replica known not `Ready` at the start; an unknown state during the
+interval; a replica gone before the interval; a pod of another workload with a similar name; `T` missing from the
+ledger. Five existing §23 tests build their positive case without a journal; under §34 that case is unknown.

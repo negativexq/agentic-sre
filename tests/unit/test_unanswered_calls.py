@@ -93,8 +93,36 @@ LOSS = [unanswered(10 + i, 10.5 + i * 0.3) for i in range(4)]
 ONLY_TARGET = [ready(POD, 4)]
 
 
+def _object(kind: str, name: str, uid: str, owner: str | None) -> ObjectVersion:
+    metadata: dict[str, Any] = {"uid": uid, "name": name}
+    if owner:
+        metadata["ownerReferences"] = [{"uid": owner, "controller": True}]
+    return ObjectVersion(
+        entity=EntityRef(kind=kind, name=name, namespace="shop"),
+        observed_at=T0,
+        body={"metadata": metadata},
+        evidence_id=f"object:{uid}",
+    )
+
+
+def journal(*replicas: str) -> dict[EntityRef, list[ObjectVersion]]:
+    """m21 §34: the journal places the target's workload and the named replicas of it."""
+    objects = (
+        _object("Deployment", "payment-service", "d1", None),
+        _object("ReplicaSet", "payment-service-abc", "rs1", "d1"),
+        _object("Pod", POD, "p1", "rs1"),
+        *(_object("Pod", name, f"p-{name}", "rs1") for name in replicas),
+    )
+    return {v.entity: [v] for v in objects}
+
+
+JOURNAL = journal()
+
+
 def witnesses(
-    spans: list[TraceSpanObservation], statuses: list[PodStatusObservation]
+    spans: list[TraceSpanObservation],
+    statuses: list[PodStatusObservation],
+    history: dict[EntityRef, list[ObjectVersion]] = JOURNAL,
 ) -> list[CausalWitness]:
     holder = Hypothesis(
         hypothesis_id="h1",
@@ -120,6 +148,7 @@ def witnesses(
         spans,
         None,
         statuses,
+        history,
     )
 
 
@@ -131,16 +160,16 @@ def test_calls_that_never_reached_the_only_server_give_a_witness_for_the_caller(
 
 
 def test_another_ready_replica_leaves_the_unanswered_calls_unbound() -> None:
-    assert (
-        witnesses(flat(*BASELINE, *LOSS), [*ONLY_TARGET, ready("payment-service-abc-2", 9)]) == []
-    )
+    statuses = [*ONLY_TARGET, ready("payment-service-abc-2", 9)]
+    assert witnesses(flat(*BASELINE, *LOSS), statuses, journal("payment-service-abc-2")) == []
 
 
 def test_a_replica_ready_before_the_baseline_and_never_seen_to_stop_still_counts() -> None:
+    replica = journal("payment-service-abc-2")
     other = [ready("payment-service-abc-2", 1)]
-    assert witnesses(flat(*BASELINE, *LOSS), [*ONLY_TARGET, *other]) == []
+    assert witnesses(flat(*BASELINE, *LOSS), [*ONLY_TARGET, *other], replica) == []
     stopped = [*other, ready("payment-service-abc-2", 3, is_ready=False)]
-    assert len(witnesses(flat(*BASELINE, *LOSS), [*ONLY_TARGET, *stopped])) == 1
+    assert len(witnesses(flat(*BASELINE, *LOSS), [*ONLY_TARGET, *stopped], replica)) == 1
 
 
 def test_a_paired_call_answered_by_another_pod_leaves_the_form_unknown() -> None:
@@ -172,7 +201,7 @@ def test_an_open_call_has_no_outcome_and_an_answered_error_is_not_unanswered() -
 def test_the_ledger_reads_only_pods_of_the_targets_workload() -> None:
     statuses = [*ONLY_TARGET, ready("order-service-abc-9", 9)]
     start, end = T0 + timedelta(minutes=5), T0 + timedelta(minutes=12)
-    assert other_server_ready(statuses, POD, "shop", start, end) is False
+    assert other_server_ready(statuses, POD, "shop", start, end, JOURNAL) is False
 
 
 def _versions(spec: dict[str, Any], uid: str = "u1") -> dict[EntityRef, list[ObjectVersion]]:

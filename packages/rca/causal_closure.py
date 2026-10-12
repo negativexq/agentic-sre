@@ -218,6 +218,7 @@ def _service_effect_witness(
     spans: Sequence[TraceSpanObservation],
     first_execution: datetime | None = None,
     pod_statuses: Sequence[PodStatusObservation] = (),
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
 ) -> list[CausalWitness]:
     """m21 contract §12: the target is not itself a symptom, but a declared symptom service's calls to the exact
     target pod show the effect (non-success, or latency far above the baseline). The witness covers that service.
@@ -259,7 +260,12 @@ def _service_effect_witness(
                     end=recovered,
                     baseline=baseline,
                     other_ready=other_server_ready(
-                        pod_statuses, target_pod.name, target_pod.namespace, baseline[0], recovered
+                        pod_statuses,
+                        target_pod.name,
+                        target_pod.namespace,
+                        baseline[0],
+                        recovered,
+                        history,
                     ),
                     parameters=SERVICE_EFFECT,
                 )
@@ -371,6 +377,7 @@ def fault_execution(
                             spans,
                             first_execution,
                             pod_statuses,
+                            history,
                         )
                     continue
                 effects = [

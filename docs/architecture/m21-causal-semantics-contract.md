@@ -3217,7 +3217,7 @@ the same variant and the same seed as `dev20-kafka-delay`.
 
 **4. The twentieth `HOLDOUT`** is pre-registered separately in testbed design.
 
-## 30. Resource pressure is a rise over the minutes before it (E; proposal, 2026-10-12, awaiting the owner)
+## 30. Resource pressure is a rise over the minutes before it (E; owner-approved 2026-10-12)
 
 ### 30.1 Measured problem
 
@@ -3333,7 +3333,7 @@ stored run therefore replays unchanged.
   - Whether the lab's alert rule changes is a lab decision.
 - **The pressure that `evaluate_resource_mechanisms` reads** (the whole read's `peak`).
 
-## 31. A dependency that the symptom's anomalous requests never reached (D1'; proposal, 2026-10-12, awaiting the owner)
+## 31. A dependency that the symptom's anomalous requests never reached (D1'; owner-approved 2026-10-12, with §31.3)
 
 ### 31.1 Measured problem
 

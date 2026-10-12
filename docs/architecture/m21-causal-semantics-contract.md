@@ -3268,6 +3268,10 @@ cannot show that for a series that comes in bursts.
 The query and its window stay unchanged. The reader reports the maximum of each part. The split comes from the read
 itself: its first `RESOURCE_BASELINE_LEAD`.
 
+**The split is applied to the case's own resource read only** (owner-approved 2026-10-12). That read begins at
+`reference − 10 min`, so its first `RESOURCE_BASELINE_LEAD` is the lead above. A read made by an investigation tool
+has a window of its own, so its first minutes are no baseline. It carries no split and keeps the previous rule.
+
 **A `RESOURCE_PRESSURE` finding is made** for a container and resource when both hold:
 1. **The recent part crossed the threshold:** its maximum is at least `PRESSURE_THRESHOLD`.
 2. **The lead stayed clearly below it:** the lead's maximum is at most `PRESSURE_BASELINE_FACTOR` times the recent

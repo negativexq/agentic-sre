@@ -75,13 +75,18 @@ only through the stage at which each request failed, not through Kafka's health.
 
 **`flush()` semantics** (`workload/common/adapters.py`):
 - `flush()` without a timeout blocks until every queued message is delivered or fails (librdkafka's delivery timeout,
-  300 s by default), so the producer span's duration does measure the wait;
+  300 s by default). The producer is one object per process, shared by every request thread, so a request's
+  `kafka publish` span measures its wait for the **whole** queue, other requests' messages included, not its own
+  message's delivery (correction, 2026-10-13);
 - no `on_delivery` callback is set and `flush()`'s return value (messages still queued) is not read;
 - a failed delivery raises nothing, the span ends without error and `kafka_messages_total{direction="produced"}`
   still increments;
 - **delivery success and failure are not observed anywhere today.**
 
-A Kafka fault therefore shows up in this workload as request latency, never as a 5xx, unless `produce()` itself raises.
+A Kafka fault therefore shows up in this workload mostly as request latency. It can still produce a 5xx: `produce()`
+raises `BufferError` when the local queue is full and `KafkaException` on other local errors, and either propagates to
+a 500 (correction, 2026-10-13: an earlier draft said none could). A delivery callback, once added, may run inside
+another request's `flush()`, so its result must be bound to the message's own request, not to the active span.
 
 ## 2. Alert attribution
 
@@ -102,6 +107,9 @@ its pending interval plus the rule's 30 s range was read and the lines were join
 **Completeness.** Over [−5 min, +2 min] around each alert, the log lines were counted between consecutive samples of
 the pod's own directly scraped 5xx counter:
 - the counts are equal in **31 of 31** alerts (one replica each, no counter reset);
+- both are written in the same process, in the same `finally` block. A loss common to both (a request killed before
+  `finally`, a process crash) would leave them equal and incomplete. The equality shows consistency, not
+  completeness of the request population;
 - the OpenTelemetry series agree in 26 and differ by 2 to 7 in 5, from export lag.
 
 Mixing the OpenTelemetry and Service-DNS sources (alarm attribution audit, finding 1) does not affect this test: it
@@ -131,7 +139,8 @@ signature. It is the only alert in the Kafka-alone runs. Neither argument above 
 
 - Every Kafka-fault run's ground-truth record is invalid (`missing recovery_at` or `missing target_effect_at`), and
   the combined runs list only the payment loss as cause. They are weak controls.
-- No run has a Kafka fault that produces 5xx, and with today's code none can: delivery failures are silent.
+- No run has a Kafka fault that produces 5xx. Delivery failures are silent, but `produce()` exceptions are not; no
+  scenario exercises them.
 
 ## 4. Why a rule cannot safely read this today
 
@@ -154,7 +163,7 @@ The facts above hold for these runs, but a name-free, versioned, replayable rule
    §29.6's declarations do not exclude Kafka upstream of payment. That exclusion holds for the 10 error diagnoses
    only through the strong claim's own witness on the payment pod (timeouts and refusals at the payment call). It
    does not hold for HTTP 500s whose reason is unlogged.
-6. **Kafka delivery outcome is unobserved,** so no Kafka-fault control can produce the error symptom.
+6. **Kafka delivery outcome is unobserved.** A Kafka-raised 5xx (from `produce()`) is possible today but no scenario exercises it.
 
 ## 5. Smallest instrumentation that would make it observable
 
@@ -202,7 +211,7 @@ The facts above hold for these runs, but a name-free, versioned, replayable rule
   - Their closure needs the instrumentation above and a rule designed on development data.
   - The gain counts only after a new, pre-registered `HOLDOUT` on a later engine.
 - **Required controls for that `HOLDOUT`:**
-  - a Kafka fault that produces 5xx (possible only after the delivery fix);
+  - a Kafka fault that produces 5xx (`produce()` raising today; a delivery failure only if the application chooses to fail on it);
   - Kafka and payment failing together;
   - order-service with two replicas;
   - network loss on the order pod (export stall);

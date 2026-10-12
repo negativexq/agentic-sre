@@ -10,7 +10,6 @@ import argparse
 import json
 from pathlib import Path
 
-from scripts.dependency_coverage_recalculation import readonly_engine
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
@@ -18,6 +17,7 @@ from packages.rca.engine import EngineConfig, build_case
 from packages.rca.replay import ReplaySource
 from packages.rca.topology import WORKLOAD_KINDS, declared_hosts
 from packages.storage.models import TraceObservationRow
+from scripts.dependency_coverage_recalculation import readonly_engine
 
 
 def main() -> None:

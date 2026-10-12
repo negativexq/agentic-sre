@@ -24,6 +24,7 @@ from opentelemetry.trace import SpanKind
 from prometheus_client import CollectorRegistry
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from packages.telemetry.execution import ExecutionRecordProcessor, record_start, record_terminal
 from packages.telemetry.metrics import WorkloadMetrics
 
 
@@ -151,12 +152,15 @@ class TelemetryRuntime:
         metrics: RuntimeMetrics,
         prometheus_metrics: WorkloadMetrics,
         logger: logging.Logger,
+        execution_logger: logging.Logger | None = None,
     ) -> None:
         self.service_name = service_name
         self.tracer = tracer
         self.metrics = metrics
         self.prometheus_metrics = prometheus_metrics
         self.logger = logger
+        # ExecutionRecord start, operation and terminal records (symptom explanation design §4.2)
+        self.execution_logger = execution_logger
 
     def record_db(
         self,
@@ -257,16 +261,20 @@ def create_runtime(
     meter = meter_provider.get_meter("agentic-sre", "0.1.1")
 
     logger = logging.getLogger(f"agentic-sre.{service_name}")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    if not logger.handlers:
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(JsonLogFormatter(service_name))
-        logger.addHandler(stream_handler)
-        if endpoint:
-            from opentelemetry.sdk._logs import LoggingHandler
+    # its own logger, so the application's log stream and the error logs the engine reads stay as they were
+    execution_logger = logging.getLogger(f"agentic-sre-execution.{service_name}")
+    for each in (logger, execution_logger):
+        each.setLevel(logging.INFO)
+        each.propagate = False
+        if not each.handlers:
+            stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(JsonLogFormatter(service_name))
+            each.addHandler(stream_handler)
+            if endpoint:
+                from opentelemetry.sdk._logs import LoggingHandler
 
-            logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
+                each.addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
+    tracer_provider.add_span_processor(ExecutionRecordProcessor(execution_logger))
 
     return TelemetryRuntime(
         service_name,
@@ -274,6 +282,7 @@ def create_runtime(
         RuntimeMetrics(meter),
         WorkloadMetrics(registry, service_name=service_name),
         logger,
+        execution_logger,
     )
 
 
@@ -334,10 +343,17 @@ class TelemetryMiddleware:
             span.set_attribute("http.request.method", method)
             span.set_attribute("url.path", path)
             span.set_attribute("http.request.header.x_request_id", request_id)
+            executed = path not in _UNTRACED_PATHS and path not in _UNMEASURED_PATHS
+            if executed:
+                record_start(self.runtime.execution_logger, method, path, request_id)
             try:
                 await self.app(scope, receive, send_with_context)
             finally:
                 duration = time.perf_counter() - started
+                if executed:
+                    record_terminal(
+                        self.runtime.execution_logger, method, path, request_id, status_code
+                    )
                 span.set_attribute("http.response.status_code", status_code)
                 if path not in _UNMEASURED_PATHS:
                     self.runtime.metrics.http(

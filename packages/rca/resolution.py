@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from packages.rca.causal_closure import (
+    _created,
+    _deleted_at,
     answer_frontier,
     explanations,
     failed_rollout,
@@ -1119,7 +1121,12 @@ def resolve_hypotheses(
         and all(
             set(h.symptom_entities).issubset(
                 _covered_symptoms(
-                    observed[h.hypothesis_id].witnesses, owned_by or {}, selects, pod_statuses
+                    observed[h.hypothesis_id].witnesses,
+                    owned_by or {},
+                    selects,
+                    pod_statuses,
+                    object_history,
+                    observation_cutoff,
                 )
             )
             for h in hypotheses
@@ -1162,19 +1169,35 @@ def resolve_hypotheses(
     return trace.model_copy(update=updates)
 
 
-def _execution_interval(witness: CausalWitness) -> tuple[datetime, datetime] | None:
-    """The fault's execution interval at the witness's target pod, from the experiment's own records."""
+def _execution_interval(
+    witness: CausalWitness,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+    cutoff: datetime | None = None,
+) -> tuple[datetime, datetime] | None:
+    """The execution interval at the witness's target pod.
+
+    A fault's, from the experiment's own records. A rollout's (m21 §35), §13's: the new pod's journaled creation to
+    its deletion, else the cutoff. ``None`` when the records cannot give it.
+    """
     target = next((hop.target for hop in witness.path if hop.relation == "fault_targets"), None)
-    if target is None or target.kind != "Pod":
+    if target is not None and target.kind == "Pod":
+        for entry in witness.origin.details.get("execution_targets", ()):
+            namespace, _, rest = str(entry.get("target", "")).partition("/")
+            if (namespace, rest.partition("/")[0]) != (target.namespace, target.name):
+                continue
+            applied, recovered = entry.get("applied_at"), entry.get("recovered_at")
+            if isinstance(applied, str) and isinstance(recovered, str):
+                return datetime.fromisoformat(applied), datetime.fromisoformat(recovered)
         return None
-    for entry in witness.origin.details.get("execution_targets", ()):
-        namespace, _, rest = str(entry.get("target", "")).partition("/")
-        if (namespace, rest.partition("/")[0]) != (target.namespace, target.name):
-            continue
-        applied, recovered = entry.get("applied_at"), entry.get("recovered_at")
-        if isinstance(applied, str) and isinstance(recovered, str):
-            return datetime.fromisoformat(applied), datetime.fromisoformat(recovered)
-    return None
+    pod = next((hop.target for hop in witness.path if hop.relation == "rolls_out"), None)
+    if pod is None or pod.kind != "Pod" or history is None:
+        return None
+    versions = history.get(pod, ())
+    created = _created(versions)
+    end = _deleted_at(versions) or cutoff
+    if created is None or end is None:
+        return None
+    return created.observed_at, end
 
 
 def _sole_ready(
@@ -1222,12 +1245,14 @@ def _covered_symptoms(
     owned_by: Mapping[EntityRef, EntityRef],
     selects: Mapping[EntityRef, Collection[EntityRef]] | None = None,
     pod_statuses: Sequence[PodStatusObservation] = (),
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
+    cutoff: datetime | None = None,
 ) -> set[EntityRef]:
     """The witnessed symptoms, a Service and its only ready Pod as one (m21 §28), and every workload that owns a
     covered Pod (m21 §27, ``owned_by`` only)."""
     covered = {w.symptom for w in witnesses}
     for witness in witnesses:
-        interval = _execution_interval(witness)
+        interval = _execution_interval(witness, history, cutoff)
         if interval is None:
             continue
         for service, pods in (selects or {}).items():

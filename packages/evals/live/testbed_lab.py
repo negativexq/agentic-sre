@@ -43,7 +43,7 @@ from packages.evals.live.journal import (
     parse_instant,
 )
 from packages.evals.live.oracle import Measurement, SeriesWriter, http_measurement
-from packages.evals.live.runner import WorkloadDriver
+from packages.evals.live.runner import Ledger, WorkloadDriver
 from packages.evals.live.scenarios import Target, Workload
 from packages.evals.live.testbed_grader import RunScore, aggregate, score_run
 from packages.evals.live.testbed_runner import (
@@ -62,6 +62,9 @@ from packages.rca.model import Diagnosis
 REPO = Path(__file__).resolve().parents[3]
 # the kubectl port-forwards the testbed started, so a later start can end any that outlived their run (§31.2 B)
 FORWARDS_FILE = REPO / ".local/testbed/forwards.json"
+LEDGER_DIR = (
+    REPO / ".local/testbed/ledgers"
+)  # the caller's own record of every request, per run database
 CP_LOG = REPO / ".local/lab/cp.log"  # `make cp-up` writes it anew for every run
 NAMESPACE = "sre-demo"
 SCENARIO_ID = "dependency-delay-payment"
@@ -192,6 +195,7 @@ class LabWorld:
         target_app: str = "payment-service",
         payment_probe: bool = False,
         forwards_file: Path = FORWARDS_FILE,
+        ledger_dir: Path = LEDGER_DIR,
     ) -> None:
         self.target_app = (
             target_app  # the workload the fault lands on; its pod is replaced for every run
@@ -213,6 +217,8 @@ class LabWorld:
         self._forwarder: PortForwarder | None = None
         self._driver: WorkloadDriver | None = None
         self.forwards_file = forwards_file
+        self.ledger_dir = ledger_dir
+        self._load_phase = "run"
         self._quiet_since: datetime | None = None
         self._replicas = 1  # design §35 DEV check 2: the target's replicas for the next run
 
@@ -637,11 +643,13 @@ class LabWorld:
         The pod's startup failures (probe timeouts under first load) belong to no run: the events they
         produce are deleted straight after, before the connector or the control plane sees them.
         """
+        self._load_phase = "warmup"
         self.start_load(10.0)
         try:
             time.sleep(WARMUP_SECONDS)
         finally:
             self.stop_load()
+            self._load_phase = "run"
 
     def start_load(self, rps: float) -> None:
         # a forward dies with its pod connection (kubectl port-forward exits on a lost connection), and nothing
@@ -656,9 +664,22 @@ class LabWorld:
             interval_seconds=max(0.05, 2.0 / rps - 0.05),
         )
         self._driver = WorkloadDriver(
-            workload, Context(order_url=f"http://localhost:{self.order_port}")
+            workload,
+            Context(order_url=f"http://localhost:{self.order_port}"),
+            ledger=self._ledger_writer(),
         )
         self._driver.start()
+
+    def _ledger_writer(self) -> Ledger:
+        path = self.ledger_dir / f"{self.database or 'unassigned'}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        phase = self._load_phase
+
+        def write(row: dict[str, Any]) -> None:
+            with path.open("a") as ledger:
+                ledger.write(json.dumps({"phase": phase, **row}) + "\n")
+
+        return write
 
     def stop_load(self) -> None:
         if self._driver is not None:

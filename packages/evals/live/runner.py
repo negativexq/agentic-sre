@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import secrets
 import threading
 import time
 import uuid
@@ -18,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from packages.evals.live.actions import (
@@ -72,9 +74,11 @@ def _http(
     payload: dict[str, Any] | None = None,
     token: str = "",
     timeout: float = REQUEST_TIMEOUT_SECONDS,
+    extra_headers: dict[str, str] | None = None,
 ) -> Any:
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
+    headers.update(extra_headers or {})
     if token:
         # The control plane's shared guard expects a bearer token, not a
         # custom header (see apps/control_plane/auth.py).
@@ -112,6 +116,18 @@ def _workload_endpoint(
     return f"{context.payment_url}/payments", _payment_request
 
 
+Ledger = Callable[[dict[str, Any]], None]
+
+
+def _failure(error: BaseException) -> tuple[int | None, str]:
+    """The HTTP status a failed request got, if any, and its cause."""
+    if isinstance(error, HTTPError):
+        return error.code, str(error.code)
+    if isinstance(error, URLError) and isinstance(error.reason, BaseException):
+        return None, type(error.reason).__name__
+    return None, type(error).__name__
+
+
 class WorkloadDriver:
     """Drive a scenario's traffic in the background until told to stop.
 
@@ -122,11 +138,16 @@ class WorkloadDriver:
     so the driver runs in a thread and is stopped once the incident opens (or
     the wait times out).  A failed request is counted, not raised: for most
     scenarios a failing request is the symptom being staged.
+
+    With a ledger, every request is also recorded by the caller itself (symptom
+    explanation design, independent counting channel): it carries a trace id the
+    caller chose, so the server's trace, or its absence, can be found for it.
     """
 
-    def __init__(self, workload: Workload, context: Context) -> None:
+    def __init__(self, workload: Workload, context: Context, ledger: Ledger | None = None) -> None:
         self._workload = workload
         self._context = context
+        self._ledger = ledger
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._attempted = 0
@@ -138,14 +159,37 @@ class WorkloadDriver:
         return self._workload.target is not Target.NONE and self._workload.count > 0
 
     def _once(self, url: str, body: Callable[[], dict[str, Any]]) -> None:
-        ok = True
+        trace_id, span_id = secrets.token_hex(16), secrets.token_hex(8)
+        started = datetime.now(UTC)
+        response: Any = None
+        status: int | None = None
+        error: str | None = None
         try:
-            _http(url, method="POST", payload=body())
-        except TRANSPORT_ERRORS:
-            ok = False
+            response = _http(
+                url,
+                method="POST",
+                payload=body(),
+                extra_headers={"traceparent": f"00-{trace_id}-{span_id}-01"},
+            )
+        except TRANSPORT_ERRORS as failure:
+            status, error = _failure(failure)
         with self._lock:
             self._attempted += 1
-            self._succeeded += int(ok)
+            self._succeeded += int(error is None)
+            if self._ledger is not None:
+                self._ledger(
+                    {
+                        "trace_id": trace_id,
+                        "started": started.isoformat(),
+                        "finished": datetime.now(UTC).isoformat(),
+                        "ok": error is None,
+                        "status": status,  # a failure's HTTP status; None on success or before a response
+                        "error": error,
+                        "order_id": response.get("order_id")
+                        if isinstance(response, dict)
+                        else None,
+                    }
+                )
 
     def _run(self) -> None:
         url, body = _workload_endpoint(self._workload, self._context)

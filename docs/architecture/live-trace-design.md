@@ -679,3 +679,76 @@ Connector is read one service at a time.
 - bytes inspected;
 - capture duration and admission waits;
 - evidence equivalence and diagnosis accuracy, against the same scenarios read before it.
+
+### 15.3 Measured result (2026-10-12, owner-accepted)
+
+**Runs:**
+- **A/B on the same data:** 240 slices of the lab Tempo's stored traces, read once one service at a time and once as
+  slices, at `a00f6ea`.
+- **DEV22:** `dependency-b` seeds 2201 and 2202, and `config-c` seed 2203, at `a00f6ea`; 3 of 3 valid.
+- **DEV22m:** the same suites again on a freshly restarted Tempo, with the Tempo container's `memory.stat` every
+  15 s; 3 of 3 valid.
+- **Before:** the twenty-second `HOLDOUT`'s runs of the same two variants.
+
+**Tempo requests and bytes inspected:**
+
+| Measure | Before | After |
+|---|---|---|
+| A/B: HTTP requests | 6,246 | 2,814 (−55%) |
+| A/B: trace-by-ID fetches | 5,526 | 2,094 (−62%) |
+| A/B: searches | 720 | 720 |
+| A/B: bytes inspected | 119.1 GB | 44.9 GB (−62%) |
+| Live: Tempo fetches per logical CAPTURE fetch | 0.82–0.98 | DEV22 0.32–0.51, DEV22m 0.54–0.75 |
+| Live: bytes inspected per CAPTURE read | 19–95 MB | DEV22 14–18 MB, DEV22m 13–54 MB |
+
+- 238 of the 240 A/B slices had identical evidence. The other 2 differ because of a Tempo search race: with two
+  block jobs and an 8-trace limit, Tempo answers after the first job completes. The difference repeated the same
+  way on a second run, so it does not come from the change.
+- Live bytes per read follow how many blocks Tempo holds, so they vary between runs more than requests do.
+- The Connector's totals counted 0 single-flight joins and 0 failures. The whole saving is §15.2's.
+
+**Capture timing:**
+
+| Measure | Before | After |
+|---|---|---|
+| Admission wait per run, total | 0–504.6 s | 0–55 s |
+| Admission wait, longest single | up to 7.4 s | up to 4.8 s |
+| Capture duration, median | 5.4–66 s | 1.8–7.4 s |
+| Alert to first diagnosis | 47.6–94.5 s | 45.9–56.8 s |
+
+The wait is now counted per slice, not per read.
+
+**Tempo memory: the peak did not drop.**
+
+| Run | Container peak | anon | file | RSS | heap |
+|---|---|---|---|---|---|
+| DEV22m `dependency-b` | 1,506 MiB | 1,244 | 30 | 1,276 | 1,192 |
+| DEV22m `config-c` | 1,861 MiB | 1,496 | 56 | 1,556 | 1,296 |
+| Before, the same variants | 1,645 / 1,663 MiB | — | — | 1,327 / 1,368 | 925 / 1,099 |
+
+- **What the samples show:**
+  - Idle, Tempo's anonymous memory is 200–370 MiB.
+  - Each capture burst raises it to 1.15–1.5 GiB, and it falls back within one to two minutes.
+  - The burst peaks grew as Tempo stored more: 1,299, 1,506, 1,606, then 1,860 MiB.
+- **Reading, not proven:** the peak follows how much data the concurrent queries hold, not how many requests there
+  are. §15.2 lowers the count and leaves the concurrency unchanged.
+- **DEV22's container figures are not used.** They held about 330 MiB of page cache left by the A/B run before them.
+- **Not comparable at the start:** before the restart, the previous Tempo's `memory.peak` had reached its 2 GiB
+  limit. Its last start was the cluster's own, about an hour before.
+- **Open:** the Tempo memory peak stays an open risk, outside this change.
+
+**Diagnosis:**
+- Every run had cause 1.00, instance 1.00 and every witness correct.
+- No false strong authority, false resolution or decoy was named.
+- No trace read failed.
+- §19, §21 and §29 had no violations.
+- Resolution by alert matched the runs before:
+  - the order-side alerts are `AMBIGUOUS` everywhere;
+  - the payment-side alerts are `RESOLVED` whenever they fire. They fired in one run before and one in DEV22, and
+    in none of DEV22m.
+
+**Verdict:**
+- P2 is accepted: requests, admission waits and capture time fell, and evidence and accuracy are unchanged.
+- The performance work is closed for now.
+- The `query_shards` A/B and the fetches repeated across incidents (§15.1, 17.0% and 11.8%) are not pursued.
+- The sample is small: 3 runs a variant set.

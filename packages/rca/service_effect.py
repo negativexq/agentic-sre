@@ -9,11 +9,18 @@ Too few calls on a side leaves the relation unknown (``None``), never false. Not
 from __future__ import annotations
 
 import statistics
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from packages.rca.model import PodStatusObservation, TraceSpanObservation
+from packages.rca.model import (
+    EntityRef,
+    Lifecycle,
+    ObjectVersion,
+    PodStatusObservation,
+    TraceSpanObservation,
+)
+from packages.rca.signals import _creation_time
 
 
 @dataclass(frozen=True)
@@ -153,8 +160,79 @@ def unanswered_calls(
     ]
 
 
-def _workload(pod: str) -> str:
-    return pod.rsplit("-", 2)[0]
+def _owner_uid(version: ObjectVersion) -> str | None:
+    metadata = version.body.get("metadata")
+    owners = metadata.get("ownerReferences") if isinstance(metadata, dict) else None
+    for owner in owners if isinstance(owners, list) else ():
+        if isinstance(owner, dict) and owner.get("controller") is not False and owner.get("uid"):
+            return str(owner["uid"])
+    return None
+
+
+def _presence(versions: Sequence[ObjectVersion]) -> tuple[datetime, datetime | None]:
+    created = min(_creation_time(v.body) or v.observed_at for v in versions)
+    deleted = next((v.observed_at for v in versions if v.lifecycle is Lifecycle.DELETED), None)
+    return created, deleted
+
+
+def _name_holder(versions: Sequence[ObjectVersion], start: datetime, end: datetime) -> str | None:
+    """The one UID the journal shows holding a pod name at some time in ``[start, end]`` (§21 Rule B's identity,
+    over an interval the pod may have joined or left); ``None`` for no holder, several, or a version without a UID."""
+    if any(v.instance_uid is None for v in versions):
+        return None
+    holders = {
+        uid
+        for uid in {v.instance_uid for v in versions}
+        for created, deleted in (_presence([v for v in versions if v.instance_uid == uid]),)
+        if created <= end and (deleted is None or deleted >= start)
+    }
+    return holders.pop() if len(holders) == 1 else None
+
+
+def _replicas(
+    history: Mapping[EntityRef, Sequence[ObjectVersion]],
+    target: EntityRef,
+    start: datetime,
+    end: datetime,
+) -> tuple[str, dict[tuple[EntityRef, str], list[ObjectVersion]]] | None:
+    """m21 §34: the target's UID and every other pod of its workload the journal places in ``[start, end]``.
+
+    The workload is the target's owning ReplicaSet's own owner (else that ReplicaSet), by UID. ``None`` when the
+    journal cannot place the target, its owner, or the owner's record.
+    """
+    versions = history.get(target)
+    uid = _name_holder(versions or (), start, end)
+    mine = next((v for v in versions or () if v.instance_uid == uid and _owner_uid(v)), None)
+    owner = _owner_uid(mine) if mine is not None else None
+    if uid is None or owner is None:
+        return None
+    records = [
+        v for ref, vs in history.items() if ref.kind == "ReplicaSet" for v in vs if v.instance_uid
+    ]
+    if not any(v.instance_uid == owner for v in records):
+        return None
+    workload = next(
+        (_owner_uid(v) for v in records if v.instance_uid == owner and _owner_uid(v)), owner
+    )
+    owners = {owner} | {
+        v.instance_uid
+        for v in records
+        if v.entity.namespace == target.namespace and _owner_uid(v) == workload and v.instance_uid
+    }
+    replicas: dict[tuple[EntityRef, str], list[ObjectVersion]] = {}
+    for ref, vs in history.items():
+        if ref.kind != "Pod" or ref.namespace != target.namespace:
+            continue
+        for version in vs:
+            other = version.instance_uid
+            if other and other != uid and _owner_uid(version) in owners:
+                replicas.setdefault((ref, other), []).append(version)
+    present = {}
+    for key, vs in replicas.items():
+        created, deleted = _presence(vs)
+        if created <= end and (deleted is None or deleted >= start):
+            present[key] = vs
+    return uid, present
 
 
 def other_server_ready(
@@ -163,34 +241,44 @@ def other_server_ready(
     namespace: str,
     start: datetime,
     end: datetime,
+    history: Mapping[EntityRef, Sequence[ObjectVersion]] | None = None,
 ) -> bool | None:
     """Whether a pod of ``target_pod``'s workload other than it may have been ``Ready`` in ``[start, end]``.
 
-    ``None`` when the lifecycle ledger holds nothing of the target itself, so it cannot show the workload. A pod
-    counts as possibly ``Ready`` when an observation shows it ``Ready`` inside the interval, or when its last
-    observation before the interval shows it ``Ready`` (nothing shows it stopped).
+    m21 §34: the workload's pods are those the journal places by UID ownership, not by name. ``True`` when the
+    ledger shows one of them ``Ready`` inside the interval, or its last observation before the interval ``Ready``.
+    ``False`` only when the ledger shows the target, and each other placed pod has a known not-``Ready`` state at or
+    before ``start`` and no unknown state during the interval. Anything else, a target or workload the journal
+    cannot place among them, is unknown (``None``): a missing record is not a pod that was not ``Ready`` (§3 I1).
     """
-    workload = _workload(target_pod)
-    mine = [s for s in statuses if s.pod.namespace == namespace and s.pod.name == target_pod]
-    if not mine:
+    target = EntityRef(kind="Pod", name=target_pod, namespace=namespace)
+    if not any(s.pod == target for s in statuses):
         return None
-    others: dict[str, list[PodStatusObservation]] = {}
-    for status in statuses:
-        name = status.pod.name
-        if status.pod.namespace == namespace and name != target_pod and _workload(name) == workload:
-            others.setdefault(name, []).append(status)
-    for observations in others.values():
-        for status in observations:
-            if (
-                status.ready is True
-                and status.observed_at >= start
-                and ((status.ready_since or status.observed_at) <= end)
-            ):
-                return True
+    placed = _replicas(history or {}, target, start, end)
+    if placed is None:
+        return None
+    unknown = False
+    for (pod, uid), _ in placed[1].items():
+        observations = [s for s in statuses if s.pod == pod and s.uid in (None, uid)]
+        if any(
+            s.ready is True and s.observed_at >= start and (s.ready_since or s.observed_at) <= end
+            for s in observations
+        ):
+            return True
         before = [s for s in observations if s.observed_at < start]
         if before and max(before, key=lambda s: s.observed_at).ready is True:
             return True
-    return False
+        at_start = [s for s in observations if s.observed_at <= start]
+        latest_at = max((s.observed_at for s in at_start), default=None)
+        latest = [s for s in at_start if s.observed_at == latest_at]
+        if not latest or any(s.ready is not False for s in latest):
+            unknown = True
+        elif any(
+            s.ready is None and s.observed_at >= start and (s.ready_since or s.observed_at) <= end
+            for s in observations
+        ):
+            unknown = True
+    return None if unknown else False
 
 
 def unanswered_effect(

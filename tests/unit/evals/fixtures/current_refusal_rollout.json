@@ -1,0 +1,938 @@
+{
+  "assessment_kind": "FROZEN_DEVELOPMENT_FIXTURE_NOT_LIVE_KUBERNETES",
+  "name": "rollout-current-refusal-dev",
+  "alert_items": [
+    {
+      "name": "OrderErrorRateHigh",
+      "service": "order-service",
+      "namespace": "shop",
+      "starts_at": "2025-01-01T12:11:00Z",
+      "labels": {
+        "alertname": "OrderErrorRateHigh",
+        "service_name": "order-service",
+        "namespace": "shop"
+      }
+    }
+  ],
+  "versions": [
+    {
+      "entity": {
+        "kind": "Deployment",
+        "name": "order-service",
+        "namespace": "shop"
+      },
+      "uid": "order-Deployment",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Deployment",
+        "metadata": {
+          "name": "order-service",
+          "labels": {
+            "app.kubernetes.io/name": "order-service"
+          },
+          "namespace": "shop",
+          "uid": "order-Deployment"
+        },
+        "spec": {
+          "replicas": 1,
+          "selector": {
+            "matchLabels": {
+              "app": "order-service"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app": "order-service"
+              },
+              "annotations": {}
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "order-service",
+                  "image": "app:1",
+                  "env": [
+                    {
+                      "name": "PAYMENT_URL",
+                      "value": "http://payment-service:8000"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "evidence_id": "obj:shop/Deployment/order-service:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "order-service-5d8f7c9b4",
+        "namespace": "shop"
+      },
+      "uid": "order-ReplicaSet",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "ReplicaSet",
+        "metadata": {
+          "name": "order-service-5d8f7c9b4",
+          "ownerReferences": [
+            {
+              "kind": "Deployment",
+              "name": "order-service",
+              "uid": "order-Deployment"
+            }
+          ],
+          "namespace": "shop",
+          "uid": "order-ReplicaSet"
+        },
+        "spec": {
+          "replicas": 1
+        }
+      },
+      "evidence_id": "obj:shop/ReplicaSet/order-service-5d8f7c9b4:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "order-service-5d8f7c9b4-abcde",
+        "namespace": "shop"
+      },
+      "uid": "order-Pod",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Pod",
+        "metadata": {
+          "name": "order-service-5d8f7c9b4-abcde",
+          "labels": {
+            "app": "order-service"
+          },
+          "ownerReferences": [
+            {
+              "kind": "ReplicaSet",
+              "name": "order-service-5d8f7c9b4",
+              "uid": "order-ReplicaSet"
+            }
+          ],
+          "namespace": "shop",
+          "uid": "order-Pod"
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "order-service",
+              "image": "app:1"
+            }
+          ]
+        },
+        "status": {
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "True",
+              "lastTransitionTime": "2025-01-01T12:00:00+00:00"
+            }
+          ]
+        }
+      },
+      "evidence_id": "obj:shop/Pod/order-service-5d8f7c9b4-abcde:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "order-service-5d8f7c9b4-abcde",
+        "namespace": "shop"
+      },
+      "uid": "order-Pod",
+      "observed_at": "2025-01-01T12:14:00Z",
+      "body": {
+        "kind": "Pod",
+        "metadata": {
+          "name": "order-service-5d8f7c9b4-abcde",
+          "labels": {
+            "app": "order-service"
+          },
+          "ownerReferences": [
+            {
+              "kind": "ReplicaSet",
+              "name": "order-service-5d8f7c9b4",
+              "uid": "order-ReplicaSet"
+            }
+          ],
+          "namespace": "shop",
+          "uid": "order-Pod"
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "order-service",
+              "image": "app:1"
+            }
+          ]
+        },
+        "status": {
+          "conditions": [
+            {
+              "type": "Ready",
+              "status": "True",
+              "lastTransitionTime": "2025-01-01T12:00:00+00:00"
+            }
+          ]
+        }
+      },
+      "evidence_id": "order-ready-snapshot",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Service",
+        "name": "order-service",
+        "namespace": "shop"
+      },
+      "uid": "order-Service",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Service",
+        "metadata": {
+          "name": "order-service",
+          "namespace": "shop",
+          "uid": "order-Service"
+        },
+        "spec": {
+          "selector": {
+            "app": "order-service"
+          }
+        }
+      },
+      "evidence_id": "obj:shop/Service/order-service:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Deployment",
+        "name": "payment-service",
+        "namespace": "shop"
+      },
+      "uid": "dep-pay",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Deployment",
+        "metadata": {
+          "name": "payment-service",
+          "labels": {
+            "app.kubernetes.io/name": "payment-service"
+          },
+          "uid": "dep-pay",
+          "namespace": "shop"
+        },
+        "spec": {
+          "replicas": 1,
+          "selector": {
+            "matchLabels": {
+              "app": "payment-service"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app": "payment-service"
+              },
+              "annotations": {}
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "payment-service",
+                  "image": "app:1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "evidence_id": "obj:shop/Deployment/payment-service:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Deployment",
+        "name": "payment-service",
+        "namespace": "shop"
+      },
+      "uid": "dep-pay",
+      "observed_at": "2025-01-01T12:09:30Z",
+      "body": {
+        "kind": "Deployment",
+        "metadata": {
+          "name": "payment-service",
+          "labels": {
+            "app.kubernetes.io/name": "payment-service"
+          },
+          "uid": "dep-pay",
+          "namespace": "shop"
+        },
+        "spec": {
+          "replicas": 1,
+          "selector": {
+            "matchLabels": {
+              "app": "payment-service"
+            }
+          },
+          "template": {
+            "metadata": {
+              "labels": {
+                "app": "payment-service"
+              },
+              "annotations": {}
+            },
+            "spec": {
+              "containers": [
+                {
+                  "name": "payment-service",
+                  "image": "missing:bad"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "evidence_id": "obj:shop/Deployment/payment-service:9.5:1",
+      "lifecycle": "UPDATED"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "payment-service-old",
+        "namespace": "shop"
+      },
+      "uid": "rs-old",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "ReplicaSet",
+        "metadata": {
+          "name": "payment-service-old",
+          "ownerReferences": [
+            {
+              "kind": "Deployment",
+              "name": "payment-service",
+              "uid": "dep-pay"
+            }
+          ],
+          "uid": "rs-old",
+          "namespace": "shop"
+        },
+        "spec": {
+          "replicas": 1
+        }
+      },
+      "evidence_id": "obj:shop/ReplicaSet/payment-service-old:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "ReplicaSet",
+        "name": "payment-service-new",
+        "namespace": "shop"
+      },
+      "uid": "rs-new",
+      "observed_at": "2025-01-01T12:09:30.600000Z",
+      "body": {
+        "kind": "ReplicaSet",
+        "metadata": {
+          "name": "payment-service-new",
+          "ownerReferences": [
+            {
+              "kind": "Deployment",
+              "name": "payment-service",
+              "uid": "dep-pay"
+            }
+          ],
+          "uid": "rs-new",
+          "namespace": "shop"
+        },
+        "spec": {
+          "replicas": 1
+        }
+      },
+      "evidence_id": "obj:shop/ReplicaSet/payment-service-new:9.51:0",
+      "lifecycle": "CREATED"
+    },
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "payment-service-old-a",
+        "namespace": "shop"
+      },
+      "uid": "pod-old",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Pod",
+        "metadata": {
+          "name": "payment-service-old-a",
+          "labels": {
+            "app": "payment-service"
+          },
+          "ownerReferences": [
+            {
+              "kind": "ReplicaSet",
+              "name": "payment-service-old",
+              "uid": "rs-old"
+            }
+          ],
+          "uid": "pod-old",
+          "namespace": "shop"
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "payment-service",
+              "image": "app:1"
+            }
+          ]
+        }
+      },
+      "evidence_id": "obj:shop/Pod/payment-service-old-a:0:0",
+      "lifecycle": "OBSERVED"
+    },
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "payment-service-old-a",
+        "namespace": "shop"
+      },
+      "uid": "pod-old",
+      "observed_at": "2025-01-01T12:09:33Z",
+      "body": {
+        "kind": "Pod",
+        "metadata": {
+          "name": "payment-service-old-a",
+          "labels": {
+            "app": "payment-service"
+          },
+          "ownerReferences": [
+            {
+              "kind": "ReplicaSet",
+              "name": "payment-service-old",
+              "uid": "rs-old"
+            }
+          ],
+          "uid": "pod-old",
+          "namespace": "shop"
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "payment-service",
+              "image": "app:1"
+            }
+          ]
+        }
+      },
+      "evidence_id": "obj:shop/Pod/payment-service-old-a:9.55:1",
+      "lifecycle": "DELETED"
+    },
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "payment-service-new-a",
+        "namespace": "shop"
+      },
+      "uid": "pod-new",
+      "observed_at": "2025-01-01T12:09:31.200000Z",
+      "body": {
+        "kind": "Pod",
+        "metadata": {
+          "name": "payment-service-new-a",
+          "labels": {
+            "app": "payment-service"
+          },
+          "ownerReferences": [
+            {
+              "kind": "ReplicaSet",
+              "name": "payment-service-new",
+              "uid": "rs-new"
+            }
+          ],
+          "uid": "pod-new",
+          "namespace": "shop"
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "payment-service",
+              "image": "app:1"
+            }
+          ]
+        }
+      },
+      "evidence_id": "obj:shop/Pod/payment-service-new-a:9.52:0",
+      "lifecycle": "CREATED"
+    },
+    {
+      "entity": {
+        "kind": "Service",
+        "name": "payment-service",
+        "namespace": "shop"
+      },
+      "uid": "svc-pay",
+      "observed_at": "2025-01-01T12:00:00Z",
+      "body": {
+        "kind": "Service",
+        "metadata": {
+          "name": "payment-service",
+          "uid": "svc-pay",
+          "namespace": "shop"
+        },
+        "spec": {
+          "selector": {
+            "app": "payment-service"
+          }
+        }
+      },
+      "evidence_id": "obj:shop/Service/payment-service:0:0",
+      "lifecycle": "OBSERVED"
+    }
+  ],
+  "error_items": [
+    {
+      "service": "order-service",
+      "at": "2025-01-01T12:10:00.010000Z",
+      "severity": "ERROR",
+      "message": "dependency.request error: payment-service Connection refused",
+      "evidence_id": "log:0",
+      "attributes": {
+        "request_id": "req-0",
+        "trace_id": "000000000000000000000000000003e8",
+        "span_id": "00000000000003e8",
+        "parent_span_id": "00000000000007d0",
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError"
+      }
+    },
+    {
+      "service": "order-service",
+      "at": "2025-01-01T12:10:12.010000Z",
+      "severity": "ERROR",
+      "message": "dependency.request error: payment-service Connection refused",
+      "evidence_id": "log:1",
+      "attributes": {
+        "request_id": "req-1",
+        "trace_id": "000000000000000000000000000003e9",
+        "span_id": "00000000000003e9",
+        "parent_span_id": "00000000000007d1",
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError"
+      }
+    },
+    {
+      "service": "order-service",
+      "at": "2025-01-01T12:10:24.010000Z",
+      "severity": "ERROR",
+      "message": "dependency.request error: payment-service Connection refused",
+      "evidence_id": "log:2",
+      "attributes": {
+        "request_id": "req-2",
+        "trace_id": "000000000000000000000000000003ea",
+        "span_id": "00000000000003ea",
+        "parent_span_id": "00000000000007d2",
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError"
+      }
+    },
+    {
+      "service": "order-service",
+      "at": "2025-01-01T12:10:36.010000Z",
+      "severity": "ERROR",
+      "message": "dependency.request error: payment-service Connection refused",
+      "evidence_id": "log:3",
+      "attributes": {
+        "request_id": "req-3",
+        "trace_id": "000000000000000000000000000003eb",
+        "span_id": "00000000000003eb",
+        "parent_span_id": "00000000000007d3",
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError"
+      }
+    }
+  ],
+  "trace_items": [
+    {
+      "trace_id": "00000000000000000000000000000001",
+      "span_id": "0000000000000001",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:05:00Z",
+      "end_at": "2025-01-01T12:05:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-client:0"
+    },
+    {
+      "trace_id": "00000000000000000000000000000001",
+      "span_id": "0000000000000064",
+      "parent_span_id": "0000000000000001",
+      "service": "payment-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:05:00Z",
+      "end_at": "2025-01-01T12:05:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "k8s.pod.name": "payment-service-old-a",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-server:0"
+    },
+    {
+      "trace_id": "00000000000000000000000000000002",
+      "span_id": "0000000000000002",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:05:30Z",
+      "end_at": "2025-01-01T12:05:30.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-client:1"
+    },
+    {
+      "trace_id": "00000000000000000000000000000002",
+      "span_id": "0000000000000065",
+      "parent_span_id": "0000000000000002",
+      "service": "payment-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:05:30Z",
+      "end_at": "2025-01-01T12:05:30.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "k8s.pod.name": "payment-service-old-a",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-server:1"
+    },
+    {
+      "trace_id": "00000000000000000000000000000003",
+      "span_id": "0000000000000003",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:06:00Z",
+      "end_at": "2025-01-01T12:06:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-client:2"
+    },
+    {
+      "trace_id": "00000000000000000000000000000003",
+      "span_id": "0000000000000066",
+      "parent_span_id": "0000000000000003",
+      "service": "payment-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:06:00Z",
+      "end_at": "2025-01-01T12:06:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "k8s.pod.name": "payment-service-old-a",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-server:2"
+    },
+    {
+      "trace_id": "00000000000000000000000000000004",
+      "span_id": "0000000000000004",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:06:30Z",
+      "end_at": "2025-01-01T12:06:30.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-client:3"
+    },
+    {
+      "trace_id": "00000000000000000000000000000004",
+      "span_id": "0000000000000067",
+      "parent_span_id": "0000000000000004",
+      "service": "payment-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:06:30Z",
+      "end_at": "2025-01-01T12:06:30.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "k8s.pod.name": "payment-service-old-a",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-server:3"
+    },
+    {
+      "trace_id": "00000000000000000000000000000005",
+      "span_id": "0000000000000005",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:07:00Z",
+      "end_at": "2025-01-01T12:07:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-client:4"
+    },
+    {
+      "trace_id": "00000000000000000000000000000005",
+      "span_id": "0000000000000068",
+      "parent_span_id": "0000000000000005",
+      "service": "payment-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:07:00Z",
+      "end_at": "2025-01-01T12:07:00.010000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "k8s.pod.name": "payment-service-old-a",
+        "http.response.status_code": "201"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "baseline-server:4"
+    },
+    {
+      "trace_id": "000000000000000000000000000003e8",
+      "span_id": "00000000000003e8",
+      "parent_span_id": "00000000000007d0",
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:10:00Z",
+      "end_at": "2025-01-01T12:10:00.020000Z",
+      "duration_raw": null,
+      "status": "ERROR",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError",
+        "http.request.header.x_request_id": "req-0"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-client:0"
+    },
+    {
+      "trace_id": "000000000000000000000000000003e8",
+      "span_id": "00000000000007d0",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:09:59.990000Z",
+      "end_at": "2025-01-01T12:10:00.030000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "http.response.status_code": "500",
+        "http.request.header.x_request_id": "req-0"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-parent:0"
+    },
+    {
+      "trace_id": "000000000000000000000000000003e9",
+      "span_id": "00000000000003e9",
+      "parent_span_id": "00000000000007d1",
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:10:12Z",
+      "end_at": "2025-01-01T12:10:12.020000Z",
+      "duration_raw": null,
+      "status": "ERROR",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError",
+        "http.request.header.x_request_id": "req-1"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-client:1"
+    },
+    {
+      "trace_id": "000000000000000000000000000003e9",
+      "span_id": "00000000000007d1",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:10:11.990000Z",
+      "end_at": "2025-01-01T12:10:12.030000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "http.response.status_code": "500",
+        "http.request.header.x_request_id": "req-1"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-parent:1"
+    },
+    {
+      "trace_id": "000000000000000000000000000003ea",
+      "span_id": "00000000000003ea",
+      "parent_span_id": "00000000000007d2",
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:10:24Z",
+      "end_at": "2025-01-01T12:10:24.020000Z",
+      "duration_raw": null,
+      "status": "ERROR",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError",
+        "http.request.header.x_request_id": "req-2"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-client:2"
+    },
+    {
+      "trace_id": "000000000000000000000000000003ea",
+      "span_id": "00000000000007d2",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:10:23.990000Z",
+      "end_at": "2025-01-01T12:10:24.030000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "http.response.status_code": "500",
+        "http.request.header.x_request_id": "req-2"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-parent:2"
+    },
+    {
+      "trace_id": "000000000000000000000000000003eb",
+      "span_id": "00000000000003eb",
+      "parent_span_id": "00000000000007d3",
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "CLIENT",
+      "start_at": "2025-01-01T12:10:36Z",
+      "end_at": "2025-01-01T12:10:36.020000Z",
+      "duration_raw": null,
+      "status": "ERROR",
+      "semantic_attributes": {
+        "server.address": "payment-service",
+        "http.request.method": "POST",
+        "error.type": "ConnectionRefusedError",
+        "http.request.header.x_request_id": "req-3"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-client:3"
+    },
+    {
+      "trace_id": "000000000000000000000000000003eb",
+      "span_id": "00000000000007d3",
+      "parent_span_id": null,
+      "service": "order-service",
+      "span_name": null,
+      "span_kind": "SERVER",
+      "start_at": "2025-01-01T12:10:35.990000Z",
+      "end_at": "2025-01-01T12:10:36.030000Z",
+      "duration_raw": null,
+      "status": "UNKNOWN",
+      "semantic_attributes": {
+        "http.response.status_code": "500",
+        "http.request.header.x_request_id": "req-3"
+      },
+      "links": [],
+      "dropped_link_count": 0,
+      "evidence_id": "failed-parent:3"
+    }
+  ],
+  "event_items": [
+    {
+      "entity": {
+        "kind": "Pod",
+        "name": "payment-service-new-a",
+        "namespace": "shop"
+      },
+      "involved_uid": "pod-new",
+      "reason": "BackOff",
+      "type": "Warning",
+      "message": "Backoff failed container",
+      "first_at": "2025-01-01T12:09:36Z",
+      "last_at": "2025-01-01T12:09:36Z",
+      "count": 1,
+      "evidence_id": "evt:shop/Pod/payment-service-new-a:BackOff:9.6"
+    }
+  ],
+  "cutoff": "2025-01-01T12:14:00+00:00",
+  "alert_coverage_start": "2025-01-01T12:00:00+00:00"
+}

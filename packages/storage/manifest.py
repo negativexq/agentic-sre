@@ -422,6 +422,41 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
     )
 
 
+def earlier_symptom_captures(
+    session: Session, incident_id: UUID, window_end: datetime
+) -> tuple[SymptomCapture, ...]:
+    """m21 §36.8: the incident's captures frozen by its earlier runs whose boundary is not after ``window_end``.
+
+    One per alert occurrence, from the latest such boundary; a resolved incident's run takes no live capture.
+    """
+    latest: dict[tuple[str, datetime], tuple[datetime, SymptomCapture]] = {}
+    for row in session.scalars(
+        select(IncidentEventRow)
+        .where(
+            IncidentEventRow.incident_id == incident_id,
+            IncidentEventRow.event_type == IncidentEventType.EVIDENCE_GATHERED.value,
+        )
+        .order_by(IncidentEventRow.sequence)
+    ):
+        payload = row.payload
+        if "symptom_captures" not in payload:
+            continue
+        try:
+            ended = datetime.fromisoformat(payload["window_end"])
+            captures = [SymptomCapture.model_validate(item) for item in payload["symptom_captures"]]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ReplayDataError(
+                f"run {payload.get('run_id')} boundary symptom_captures: {error}"
+            ) from error
+        if ended > window_end:
+            continue
+        for capture in captures:
+            key = (capture.rule.alert, capture.rule.fired_at)
+            if key not in latest or latest[key][0] <= ended:
+                latest[key] = (ended, capture)
+    return tuple(capture for _, (_, capture) in sorted(latest.items()))
+
+
 def load_replay_run(session: Session, run_id: str) -> tuple[RunBoundary, ManifestMembers]:
     """A run's boundary and exactly its manifest members, checked for consistency.
 
@@ -522,6 +557,7 @@ __all__ = [
     "ManifestRequest",
     "build_manifest",
     "canonical_provider_capabilities",
+    "earlier_symptom_captures",
     "load_manifest",
     "load_manifest_digest",
     "load_members",

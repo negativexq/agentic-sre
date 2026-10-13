@@ -4030,3 +4030,21 @@ counter's increment. Nothing else changes.
 
 The amendment was found on a `DEV` result. It rests on how Prometheus stores a scrape, not on that result; the next
 `HOLDOUT` checks it.
+
+### 36.8 A resolved incident keeps the captures taken before its resolution (owner-approved 2026-10-13; control plane)
+
+**Finding.** In `dev26b` `negative-b`, the `OrderErrorRateHigh` incident's open runs answered §36 under v3. Its last
+run came after the resolution, froze its window at the incident's last transition, and took no live capture, as §36.2
+says. It froze no `symptom_captures`, the question stayed `OPEN` (`NOT_CAPTURED`), and the incident's final diagnosis
+was `AMBIGUOUS`. Logs and traces do not have this gap, because they are recorded per incident, not per run.
+
+**Amendment.** A resolved incident's run reads nothing new. It freezes, at its own boundary, the captures that the
+incident's earlier runs froze at boundaries whose `window_end` is not after the frozen window's end. It keeps one
+capture per alert occurrence (`alert`, `fired_at`), from the latest such boundary.
+
+These captures were observed before the window closed, so the run uses nothing the incident's own timeline did not
+already hold. Replay reads them from the run's boundary as before. Nothing in the rule changes.
+
+**Offline on `dev26b`:**
+- the `OrderErrorRateHigh` incident's final run becomes `RESOLVED`, with leader `Deployment/payment-service`;
+- every `dependency-b` incident stays unanswered.

@@ -3819,3 +3819,135 @@ by open questions or rivals.
 **Tests.** New: the interval from creation to deletion or the cutoff; no journal, no creation, no cutoff; a rollout
 witness at a Service covering its only ready Pod and Deployment; a second ready Pod keeping it to the Service. The
 existing coverage tests, which pass no journal, are unchanged.
+
+## 36. A symptom met by refusals at another peer (owner-approved 2026-10-13; engine 2.15.0)
+
+This answers one kind of `dependency` question still open after §29's A and C. It changes no witness, support,
+explanation, coverage, leader or tier rule, and no other condition of `RESOLVED`.
+
+### 36.1 Measured problem
+
+**Source:** the four `dev24` runs (engine 2.14.0; `dependency-b`, `config-c`, `dependency-b-kafka-delay`,
+`negative-b`), 21 diagnoses, 17 not `RESOLVED`.
+- **In 4 of them, one open `kafka` question is the only blocker:** `OrderErrorRateHigh` and
+  `OrderDependencyLatencyHigh` in `dependency-b` and `negative-b`. The question is `CALLED`; A and C cannot answer it.
+- **What the requests did.** These runs carry the workload's ExecutionRecord (design note
+  `symptom-materiality-design.md` §4.2). The caller's own ledger accounts for every request of each run, and each of
+  them has its start and terminal records: 19,708 of 19,708.
+  - In all four runs, every one of the 1,148 failed requests ran a `postgres` operation, then its `payment-service`
+    call, and ended there.
+  - None ran a `kafka` operation.
+- **`OrderErrorRateHigh`** (`sum(rate(http_requests_total{service="order-service",status=~"5.."}[30s])) > 0.05`,
+  `for: 15s`, evaluated every 5 s).
+  - At each evaluation from its pending start to its firing, the window held 9 to 24 requests (`dependency-b`) and
+    10 to 24 (`negative-b`) whose terminal operation was a **refused** connection to `payment-service`.
+  - Two in 30 s already exceed the threshold.
+- **`OrderDependencyLatencyHigh`** (a mean of call durations): without its timed-out calls, the mean falls below the
+  threshold at most evaluations. Timeouts and slow calls carry this symptom. A timeout can also arise in the caller
+  itself, so nothing here answers it.
+
+**Why §31 does not apply, and why this is not §31.** §31 stated a universal fact of every anomalous request ("none
+reached the dependency") from a cut sample, and was withdrawn for it (§31.7).
+- This rule states an **existential, lower-bound** fact: enough refused requests to meet the alert's own condition.
+  A record the read missed can only add requests.
+- It reads the ExecutionRecord, not a sample of traces.
+
+### 36.2 Evidence captured for it
+
+Two new captures are frozen into the run's manifest (principle I of the design note). The engine reads only those
+members; replay serves them as stored and never queries a provider again.
+- **The alert's rule,** as Prometheus serves it at capture time: expression, `for`, the group's evaluation interval,
+  and the scrape interval of the targets the expression selects.
+- **The ExecutionRecord** of the symptom Service's Pods, from the pending start minus the expression's range to the
+  firing time: terminal and operation records with `trace_id`, `k8s.pod.uid`, operation kind, `server.address`,
+  `error.type`, start and duration.
+
+A run without these members, every run stored before 2.15.0 among them, never meets condition 1 below. Its
+diagnoses are unchanged.
+
+### 36.3 Amendment
+
+**`m21.frontier.dependency-refusal-sufficient` (v1), answer `ANSWERED_SYMPTOM_MET_ELSEWHERE`.**
+- **Scope:** applied after A and C to `dependency` questions still `OPEN`, for each material claim whose symptom
+  alert is the question's.
+- **The caller** is the workload whose `calls` edge raised the question, as in C.
+- **The question's dependency** is `D`.
+
+All of these must hold:
+1. **Captured.** The run's manifest holds the alert's rule and the ExecutionRecord for the interval, and neither
+   read is `FAILED`. Otherwise `NOT_CAPTURED`.
+2. **A counted request outcome.** The expression has the form `sum(rate(C{…}[R])) > T` (or `>=`). Its selector binds
+   the caller's Service through the alert's own `service` label, and its `status` matcher accepts only `5xx` codes.
+   `C` is the server request counter that is incremented with each terminal record (`http_requests_total`): a
+   measurement binding fixed in this text, not an entity name. Otherwise `FORM_UNSUPPORTED`.
+3. **Known timing.** The firing time, `for`, the group interval `G` and the scrape interval `S` are known. Otherwise
+   `TIMING_UNKNOWN`.
+4. **Refused elsewhere, before `D`.** A request counts when all of these hold:
+   - its terminal record has a status the matcher accepts;
+   - its terminal operation, the last failed operation, has `error.type` `ConnectionRefusedError` or `ECONNREFUSED`;
+   - that operation's `server.address` is a host the caller declares for a Service `P ≠ D` (§29.6's attribution);
+   - no operation to `D` precedes it in the record.
+5. **The peer does not use `D`.** `P` declares no host for `D`, or C's conditions (§29.2, as amended by §29.6) hold
+   for caller `P` and dependency `D`. Otherwise `PEER_USES_IT`.
+6. **Enough at every evaluation.** At each evaluation from `firing − for` to the firing, every `G`:
+   - take the counted requests whose terminal record falls in `[t − R + S, t − S]`;
+   - their number `n` must satisfy `n / R > T` (or `≥`).
+
+   Otherwise `NOT_SUFFICIENT`, naming the first evaluation that fails.
+
+**Why condition 6 is a lower bound.** Every request in `[t − R + S, t − S]` lies between the window's first and last
+scrape of the counter. `rate` extrapolates only outward, and `sum` adds series that are not negative. So the alert's
+value at `t` is at least `n / R`, whatever else the counter held.
+
+**Why a refusal is not `D`'s doing.** A refused connection is the destination path's answer: no listener, or a
+Service with no ready endpoint. Another component inside the caller cannot produce it. Condition 5 ensures `D` is not
+behind the peer. Condition 4 ensures the request never reached `D` before it ended.
+
+**What the answer says:** the alert's condition was met, at every evaluation that made it fire, by requests refused at
+another peer before reaching `D`. That peer does not use `D`. So `D` cannot be the alert's initiating cause.
+
+**What it does not say.** It keeps these uncertainties:
+- `AN_ADDITIONAL_CONTRIBUTION`: `D` may have added other failures.
+- `THE_PEER_S_OWN_CAUSE`: why `P` refused is the claims' question, adjudicated as before.
+
+It says nothing about `D`'s health.
+
+**§3.** The rule reads presence (refused requests), not absence, apart from C's bounded exception in condition 5,
+already approved (§29.2). No entity name is read (I3): attribution is by `server.address` against the caller's
+declaration. The counter and the `error.type` values are measurement definitions fixed in this text. The rule never
+excludes or contradicts a claim. It answers the question for the incident's claims only.
+
+**Unchanged:** A, C, §29.6, B's and §31's withdrawals, every other rule and every other condition of `RESOLVED`.
+
+### 36.4 Consequences, estimated
+
+- **`dev24`:** the `kafka` question of `OrderErrorRateHigh` in `dependency-b` and `negative-b` would be answered, and
+  both would become `RESOLVED` if nothing else holds them.
+- **Unchanged:**
+  - `OrderDependencyLatencyHigh` (`FORM_UNSUPPORTED`: a ratio of durations);
+  - the lag alerts;
+  - `config-c` (no open dependency question);
+  - the `kafka`-delay run, where `payment-service`'s own question and two leaders remain.
+- **Every stored run before 2.15.0 is unchanged** (`NOT_CAPTURED`). So are the twenty-second `HOLDOUT`'s 22 candidate
+  diagnoses.
+
+### 36.5 Measurement, pre-registered
+
+1. **Unit tests** of each condition in turn.
+   - **Hard:**
+     - a request with an operation to `D` before its terminal is never counted;
+     - an evaluation below the threshold leaves the question `OPEN`;
+     - a run without the captures is `NOT_CAPTURED`.
+2. **Offline paired replay** of every stored run, 2.14.0 against 2.15.0.
+   - **Hard:** no change at all in any run without the captures.
+3. **`DEV` checks, unscored,** with the captures live:
+   - `dependency-b`, `negative-b`, `config-c`, `dependency-b-kafka-delay`;
+   - the `kafka` delay alone (`dependency-kafka-delay`).
+   - **Hard:**
+     - no `ANSWERED_SYMPTOM_MET_ELSEWHERE` where a counted request had an operation to `D` before its terminal, checked
+       over every stored record of the run;
+     - none in the `kafka` delay alone.
+   - **Reported:** every answer with its evaluations and counts, every question left open with its condition, and
+     every new `RESOLVED` with its leader against the run's cause.
+4. **ITBench-Lite,** as a regression check.
+5. **A `HOLDOUT` not yet seen,** pre-registered separately before it runs, with the hard conditions above.

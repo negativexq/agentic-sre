@@ -152,3 +152,42 @@ def test_real_reader_bound_holds_and_capture_stays_within_it() -> None:
     capture = capture_error_logs(reader, ["order-service"], T0, T0 + timedelta(hours=2))
     assert capture.succeeded and not capture.failed
     assert spans and max(spans) <= int(LOKI_MAX_QUERY_SPAN.total_seconds() * 1e9)
+
+
+def test_otlp_correlation_from_loki_stream_labels_is_preserved() -> None:
+    payload = {
+        "data": {
+            "result": [
+                {
+                    "stream": {
+                        "service_name": "order-service",
+                        "severity_text": "ERROR",
+                        "request_id": "req",
+                        "trace_id": "a" * 32,
+                        "span_id": "b" * 16,
+                        "parent_span_id": "c" * 16,
+                        "server_address": "payment-service",
+                        "http_request_method": "POST",
+                        "error_type": "ConnectionRefusedError",
+                    },
+                    "values": [
+                        [
+                            str(int(T0.timestamp() * 1e9)),
+                            "dependency.request error: payment-service refused",
+                        ]
+                    ],
+                }
+            ]
+        }
+    }
+
+    def opener(*args: Any, **kwargs: Any) -> io.BytesIO:
+        return io.BytesIO(json.dumps(payload).encode())
+
+    (record,) = LokiLogReader("http://unused", opener=opener).error_logs(
+        ["order-service"], T0, T0 + timedelta(seconds=1)
+    )
+    assert record.attributes["request_id"] == "req"
+    assert record.attributes["parent_span_id"] == "c" * 16
+    assert record.attributes["error.type"] == "ConnectionRefusedError"
+    assert record.attributes["server.address"] == "payment-service"

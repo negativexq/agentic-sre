@@ -478,7 +478,7 @@ class LokiLogReader:
                         severity=str(labels.get("level") or labels.get("detected_level") or ""),
                         message=str(entry[1])[:300],
                         attributes=source_log_attributes(
-                            str(entry[1]), entry[2] if len(entry) > 2 else None
+                            str(entry[1]), entry[2] if len(entry) > 2 else None, labels
                         ),
                         evidence_id=f"loki:{service}:{entry[0]}:{index}",
                     )

@@ -38,14 +38,16 @@ def _value(key: str, value: Any) -> str | None:
     return text
 
 
-def source_log_attributes(message: str, metadata: Any = None) -> dict[str, str]:
+def source_log_attributes(
+    message: str, metadata: Any = None, stream_metadata: Any = None
+) -> dict[str, str]:
     body: Any = {}
     if len(message) <= 100_000:
         try:
             body = json.loads(message)
         except (ValueError, RecursionError):
             pass
-    sources = [item for item in (body, metadata) if isinstance(item, Mapping)]
+    sources = [item for item in (body, metadata, stream_metadata) if isinstance(item, Mapping)]
     result = {}
     for key in FIELDS:
         values: set[str] = set()

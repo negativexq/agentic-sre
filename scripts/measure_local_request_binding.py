@@ -58,7 +58,9 @@ class Capture(logging.Handler):
         self.lines.append(self.format(record))
 
 
-def measure(output: Path, repeats: int, workers: int) -> dict[str, Any]:
+def measure(
+    output: Path, repeats: int, workers: int, *, otlp_endpoint: str | None = None
+) -> dict[str, Any]:
     if output.exists():
         raise ValueError("Use a fresh output directory; measurements are not overwritten")
     output.mkdir(parents=True)
@@ -72,6 +74,7 @@ def measure(output: Path, repeats: int, workers: int) -> dict[str, Any]:
     protocol = {
         "profile": "LOCAL_HTTP_DEV_CAPTURE",
         "rca_evaluated": False,
+        "otlp_endpoint": otlp_endpoint,
         "scenarios": scenarios,
         "requests_per_scenario": repeats,
         "workers": workers,
@@ -106,6 +109,22 @@ def measure(output: Path, repeats: int, workers: int) -> dict[str, Any]:
     runtime.execution_logger = None
     capture = Capture(service)
     runtime.logger.handlers = [capture]
+    log_provider = None
+    if otlp_endpoint is not None:
+        from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+        )
+        log_provider = LoggerProvider(resource=Resource.create({"service.name": service}))
+        log_provider.add_log_record_processor(
+            BatchLogRecordProcessor(OTLPLogExporter(endpoint=otlp_endpoint, insecure=True))
+        )
+        runtime.logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=log_provider))
 
     class Payment(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
@@ -215,6 +234,10 @@ def measure(output: Path, repeats: int, workers: int) -> dict[str, Any]:
         payment.shutdown()
         payment.server_close()
         payment_thread.join(timeout=2)
+    if not provider.force_flush(timeout_millis=10000):
+        raise RuntimeError("DEV trace exporter did not flush")
+    if log_provider is not None and not log_provider.force_flush(timeout_millis=10000):
+        raise RuntimeError("DEV log exporter did not flush")
     captured = datetime.now(UTC)
     end = captured
     provenance: dict[str, Any] = {"incident_id": run_id, "run_id": run_id, "captured_at": captured}
@@ -402,6 +425,8 @@ def measure(output: Path, repeats: int, workers: int) -> dict[str, Any]:
     (output / "binding-report.json").write_text(report.model_dump_json(indent=2) + "\n")
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     provider.shutdown()
+    if log_provider is not None:
+        log_provider.shutdown()
     return summary
 
 

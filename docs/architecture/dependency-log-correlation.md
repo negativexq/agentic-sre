@@ -34,3 +34,5 @@ Tests cover real refused HTTP calls inside server/client spans, repeated and con
 Next, verify frozen log IDs against recorded trace/server facts in a read-only adapter for the development [episode binding contract](episode-binding-evidence-contract.md). Require explicit identity, timestamp and provenance checks; do not accept bare schema assertions as authenticated relations. This instrumentation cannot retroactively add the missing IDs to the three HOLDOUT23 diagnoses.
 
 The read-only file adapter is now implemented; see [frozen-request-binding-adapter.md](frozen-request-binding-adapter.md). It corroborates exported log/span records and reports missing links, while source authenticity and database manifest membership remain explicitly unverified.
+
+Real collector measurement found that this Loki setup returns OTLP assertions in stream labels. The allowlisted extraction now reads those labels as a third source and rejects conflicts with body/entry metadata. Results and the capture-manifest round trip are recorded in [the real OTLP DEV measurement](../results/2026-10-14-otlp-request-binding-dev.md).

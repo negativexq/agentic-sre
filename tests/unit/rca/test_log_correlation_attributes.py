@@ -48,3 +48,20 @@ def test_legacy_plain_text_and_unstructured_json_stay_unbound() -> None:
     assert source_log_attributes("payment-service timeout request_id=req") == {}
     assert source_log_attributes('["timeout"]') == {}
     assert source_log_attributes("{broken") == {}
+
+
+def test_otlp_stream_labels_are_preserved_without_precedence_over_conflicts() -> None:
+    stream = {
+        "request_id": "req",
+        "trace_id": "a" * 32,
+        "parent_span_id": "b" * 16,
+        "server_address": "payment",
+        "error_type": "TimeoutError",
+    }
+    result = source_log_attributes("dependency.request error", stream_metadata=stream)
+    assert result["request_id"] == "req"
+    assert result["parent_span_id"] == "b" * 16
+    assert result["error.type"] == "TimeoutError"
+    conflicting = source_log_attributes('{"request_id":"other"}', stream_metadata=stream)
+    assert "request_id" not in conflicting
+    assert conflicting["trace_id"] == "a" * 32

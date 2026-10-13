@@ -2026,3 +2026,69 @@ So `target_effect_at` was never stamped, and every run was `INVALID`: `dev23` 2/
 - the limit is calibrated from the baseline as for every probe.
 
 No other scenario's probe changes.
+
+## 41. Twenty-third HOLDOUT, full: pre-registration for m21 §36 (2026-10-13, owner-approved, frozen before the run)
+
+This is m21 §36.5 (5): a `HOLDOUT` not yet seen, run after the unit tests, the paired replay, the `DEV` checks and
+ITBench-Lite.
+
+**Changes since §38:**
+- **Engine 2.11.0 to 2.17.0,** including m21 §36:
+  - a `dependency` question is answered `ANSWERED_SYMPTOM_MET_ELSEWHERE` when the callers' firing alert was met by
+    refusals at another peer, before any operation to the dependency;
+  - condition 6 is read from the counter's own samples (§36.6), with the visibility of §36.7.
+- **The control plane:**
+  - captures each firing alert's rule, its counter samples and its Service's ExecutionRecords into the run boundary
+    (m21 §36.2);
+  - a resolved incident's run freezes the captures its earlier runs took (§36.8).
+- **The Connector:** the lab's image is built from `905ab7d`. Its readers are unchanged since then.
+- **The lab:**
+  - §39: one scrape path per workload counter;
+  - §40: the `dependency-kafka-delay` target probe.
+- **The harness:** a long run database name is kept apart by a digest (PR #146).
+
+**Comparability.**
+- §39 changes when `HighErrorRate` and `OrderErrorRateHigh` fire, so no comparison with an earlier `HOLDOUT` is made on
+  alert timing.
+- `dependency-kafka-delay` is in a `HOLDOUT` for the first time, so it has no earlier result.
+
+**The setup:**
+- **Variants and seeds:**
+
+  | Variant | Seeds |
+  |---|---|
+  | `dependency-b` | 518–520 |
+  | `direct-b` | 521–523 |
+  | `scheduled-b` | 524–526 |
+  | `config-b` | 527–529 |
+  | `negative-b` | 530–532 |
+  | `competing-b` | 533–535 |
+  | `config-c` | 536–538 |
+  | `negative-c` | 539–541 |
+  | `dependency-kafka-delay` | 542–544 |
+
+- **Suites:** `holdout23-<variant>`, tier `HOLDOUT`.
+- **Frozen commit:** the merge commit of this pre-registration, recorded in the manifests. It holds engine 2.17.0.
+- **Where it runs:** as §32, from a worktree of that commit, with links to the main tree's `.venv` and `.local`.
+- **Scoring:** with §20's grader.
+
+**Criteria (hard):**
+- **Acceptance:** the frozen bar:
+  - no false strong authority;
+  - no false `RESOLVED`;
+  - at least 90% valid;
+  - the decoy never named.
+- **Carried over from §36:** its criteria, as §37 and §38 kept them.
+- **m21 §36.5:**
+  - no `ANSWERED_SYMPTOM_MET_ELSEWHERE` where a counted request had an operation to the dependency before its
+    terminal, checked over every stored record of the run;
+  - no `ANSWERED_SYMPTOM_MET_ELSEWHERE` in any `dependency-kafka-delay` run.
+
+**Reported beside them, for information only** (these never select or tune a rule):
+- **`RESOLVED` per variant,** against §38. For each scored diagnosis that is not `RESOLVED`, the condition that
+  blocked it.
+- **Every §36 answer,** with its evaluations and counts. Every §36 question left open, with its condition.
+- **Every new `RESOLVED`,** with its leader against the run's cause.
+- **The run's incidents replayed offline without §36** (`scripts/refusal_sufficiency_recalculation.py`). Every change
+  is listed.
+- **`dependency-kafka-delay`'s validity,** after §40.

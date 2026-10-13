@@ -36,6 +36,7 @@ SEMANTIC_ATTRIBUTE_ALLOWLIST = frozenset(
         "rpc.response.status_code",
         "rpc.grpc.status_code",
         "http.request.method",
+        "http.request.header.x_request_id",
         "http.response.status_code",
         "http.status_code",
         "http.route",

@@ -32,3 +32,5 @@ No existing HOLDOUT database was migrated, replayed or rewritten for this delive
 Tests cover real refused HTTP calls inside server/client spans, repeated and concurrent requests, context cleanup, JSON formatting, Loki normalization, storage round trips, old observation serialization, schema upgrade/downgrade and unchanged RCA documents when attributes are added. Structured HTTP refusal, timeout and status-code tests remain intact.
 
 Next, verify frozen log IDs against recorded trace/server facts in a read-only adapter for the development [episode binding contract](episode-binding-evidence-contract.md). Require explicit identity, timestamp and provenance checks; do not accept bare schema assertions as authenticated relations. This instrumentation cannot retroactively add the missing IDs to the three HOLDOUT23 diagnoses.
+
+The read-only file adapter is now implemented; see [frozen-request-binding-adapter.md](frozen-request-binding-adapter.md). It corroborates exported log/span records and reports missing links, while source authenticity and database manifest membership remain explicitly unverified.

@@ -604,3 +604,21 @@ def test_tempo_provider_failure_is_error_taped_and_returns_explicit_no_data() ->
         "ERROR",
     )
     assert row.error_type == "ConnectionError"
+
+
+def test_request_id_attribute_does_not_change_existing_runtime_call_facts() -> None:
+    caller = _span("caller", service="frontend")
+    callee = _span("callee", service="payment", parent="caller", status=TraceSpanStatus.ERROR)
+    original = derive_runtime_trace_call_facts((caller, callee))
+    enriched = tuple(
+        span.model_copy(
+            update={
+                "semantic_attributes": {
+                    **span.semantic_attributes,
+                    "http.request.header.x_request_id": "request-001",
+                }
+            }
+        )
+        for span in (caller, callee)
+    )
+    assert derive_runtime_trace_call_facts(enriched) == original

@@ -12,6 +12,7 @@ from urllib.error import URLError
 from uuid import uuid4
 
 import pytest
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -23,8 +24,15 @@ from starlette.types import Receive, Scope, Send
 from workload.common.adapters import HttpPaymentGateway
 from workload.common.contracts import PaymentRequest
 
+from packages.evals.frozen_request_binding import (
+    FrozenLog,
+    FrozenRequestEvidence,
+    FrozenSpan,
+    corroborate_frozen_requests,
+)
 from packages.rca.live import LokiLogReader
-from packages.rca.model import LogRecord
+from packages.rca.model import LogRecord, TraceSpanObservation, TraceSpanStatus
+from packages.rca.traces import semantic_attributes
 from packages.storage.models import Base, IncidentRow
 from packages.storage.repositories import LogObservationRepository
 from packages.telemetry import create_runtime
@@ -45,7 +53,7 @@ class Capture(logging.Handler):
 def test_failed_request_source_identity_survives_loki_and_storage() -> None:
     runtime = create_runtime(f"log-correlation-{uuid4()}", registry=CollectorRegistry())
     exporter = InMemorySpanExporter()
-    provider = TracerProvider()
+    provider = TracerProvider(resource=Resource.create({"service.name": "order-service"}))
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     runtime.tracer = provider.get_tracer("correlation-test")
     capture = Capture()
@@ -88,7 +96,17 @@ def test_failed_request_source_identity_survives_loki_and_storage() -> None:
             "result": [
                 {
                     "stream": {"service_name": "order-service", "level": "ERROR"},
-                    "values": [[str(int(now.timestamp() * 1e9)), json.dumps(dependency[0])]],
+                    "values": [
+                        [
+                            str(
+                                int(
+                                    datetime.fromisoformat(dependency[0]["timestamp"]).timestamp()
+                                    * 1e9
+                                )
+                            ),
+                            json.dumps(dependency[0]),
+                        ]
+                    ],
                 }
             ]
         }
@@ -106,6 +124,53 @@ def test_failed_request_source_identity_survives_loki_and_storage() -> None:
     assert record.attributes["request_id"] == "request-a"
     assert record.attributes["parent_span_id"] == symptom[0]["span_id"]
     assert record.attributes["trace_id"] == dependency[0]["trace_id"]
+    captured = now
+    provenance: dict[str, Any] = {
+        "incident_id": "test-incident",
+        "run_id": "test-run",
+        "captured_at": captured,
+    }
+    frozen_spans = []
+    for sdk_span in exporter.get_finished_spans():
+        if format(sdk_span.context.trace_id, "032x") != dependency[0]["trace_id"]:
+            continue
+        assert sdk_span.start_time is not None and sdk_span.end_time is not None
+        frozen_spans.append(
+            FrozenSpan(
+                **provenance,
+                source_reference=f"sdk-export:{sdk_span.context.span_id:016x}",
+                record=TraceSpanObservation(
+                    trace_id=f"{sdk_span.context.trace_id:032x}",
+                    span_id=f"{sdk_span.context.span_id:016x}",
+                    parent_span_id=f"{sdk_span.parent.span_id:016x}" if sdk_span.parent else None,
+                    service=str(sdk_span.resource.attributes["service.name"]),
+                    span_kind=sdk_span.kind.name,
+                    start_at=datetime.fromtimestamp(sdk_span.start_time / 1e9, UTC),
+                    end_at=datetime.fromtimestamp(sdk_span.end_time / 1e9, UTC),
+                    status=TraceSpanStatus.ERROR
+                    if sdk_span.status.status_code.name == "ERROR"
+                    else TraceSpanStatus.UNKNOWN,
+                    semantic_attributes=semantic_attributes(
+                        {"SpanAttributes": sdk_span.attributes or {}}
+                    ),
+                    evidence_id=f"sdk-span:{sdk_span.context.span_id:016x}",
+                ),
+            )
+        )
+    frozen = FrozenRequestEvidence(
+        incident_id="test-incident",
+        run_id="test-run",
+        episode_start=min(span.record.start_at for span in frozen_spans),
+        episode_end=captured,
+        frozen_cutoff=captured,
+        caller_service="order-service",
+        configured_peer="127.0.0.1",
+        logs=(FrozenLog(**provenance, source_reference="loki-test-export:1", record=record),),
+        spans=tuple(frozen_spans),
+    )
+    report = corroborate_frozen_requests(frozen)
+    assert report.relations[0].request_relation == "CORROBORATED"
+    assert report.causal_origin == report.same_fault_across_episodes == "UNASSESSED"
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     incident_id = uuid4()

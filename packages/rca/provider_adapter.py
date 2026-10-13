@@ -64,6 +64,18 @@ class LokiReader(Protocol):
     ) -> list[LogRecord]: ...
 
 
+class AlertRuleReader(Protocol):
+    def alert_rule(
+        self, alert: str, labels: Mapping[str, str], at: datetime
+    ) -> dict[str, object]: ...
+
+
+class ExecutionRecordReader(Protocol):
+    def execution_records(
+        self, namespace: str, service: str, starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, str]]: ...
+
+
 class TempoReader(Protocol):
     def query(
         self, target: EntityRef, query: InvestigationQuery
@@ -503,6 +515,59 @@ class ProviderAdapter:
             ),
         )
         return result
+
+    def supports_symptom_capture(self) -> bool:
+        """m21 §36.2: the configured Prometheus serves alert rules and Loki ExecutionRecords."""
+        return callable(getattr(self.readers.prometheus, "alert_rule", None)) and callable(
+            getattr(self.readers.loki, "execution_records", None)
+        )
+
+    def query_alert_rule(
+        self, alert: str, labels: Mapping[str, str], at: datetime
+    ) -> tuple[dict[str, object], int] | ProviderReadFailure:
+        """m21 §36.2: one alert's rule as Prometheus serves it, taped with its read id."""
+        reader = cast(AlertRuleReader, self.readers.prometheus)
+        descriptor = {
+            "provider": "prometheus",
+            "operation": "alert_rule",
+            "alert": alert,
+            "labels": dict(sorted(labels.items())),
+            "at": at.isoformat(),
+        }
+        return cast(
+            tuple[dict[str, object], int] | ProviderReadFailure,
+            self._provider_call(
+                capability="prometheus_alert_rule",
+                query_key=provider_query_key(descriptor),
+                descriptor=descriptor,
+                call=lambda: reader.alert_rule(alert, labels, at),
+                include_read_id=True,
+            ),
+        )
+
+    def query_execution_records(
+        self, namespace: str, service: str, starts_at: datetime, ends_at: datetime
+    ) -> tuple[list[dict[str, str]], int] | ProviderReadFailure:
+        """m21 §36.2: one service's ExecutionRecord entries in the window, taped with its read id."""
+        reader = cast(ExecutionRecordReader, self.readers.loki)
+        descriptor = {
+            "provider": "loki",
+            "operation": "execution_records",
+            "namespace": namespace,
+            "service": service,
+            "starts_at": starts_at.isoformat(),
+            "ends_at": ends_at.isoformat(),
+        }
+        return cast(
+            tuple[list[dict[str, str]], int] | ProviderReadFailure,
+            self._provider_call(
+                capability="loki_execution_records",
+                query_key=provider_query_key(descriptor),
+                descriptor=descriptor,
+                call=lambda: reader.execution_records(namespace, service, starts_at, ends_at),
+                include_read_id=True,
+            ),
+        )
 
     def error_logs(
         self,

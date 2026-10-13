@@ -73,9 +73,10 @@ from packages.rca.live import (
 )
 from packages.rca.llm import LLMClient
 from packages.rca.manifest import alert_from_payload, event_evidence_id
-from packages.rca.model import Alert, Diagnosis, JournalEntry
+from packages.rca.model import Alert, Diagnosis, JournalEntry, SymptomCapture
 from packages.rca.presentation import shown_root_cause
 from packages.rca.provider_adapter import ProviderAdapter, ProviderReaders
+from packages.rca.symptom_capture import capture_symptoms
 from packages.storage import (
     AlertRepository,
     DiagnosisRepository,
@@ -1034,6 +1035,7 @@ class DiagnosisService:
         snapshot_cycle_id: int | None = None
         listed: tuple[dict[str, Any], ...] = ()
         transport_proven_at: datetime | None = None
+        symptom_captures: tuple[SymptomCapture, ...] = ()
         if resolved:
             if self.reader is not None:
                 # Keep the shared journal current, and wait until everything the Connector
@@ -1052,6 +1054,8 @@ class DiagnosisService:
                 self._capture_logs(incident_id, alerts, listed, capture_adapter)
             if self.trace_capture and capture_adapter.supports("runtime_traces"):
                 self._capture_traces(incident_id, alerts, listed, capture_adapter)
+            # m21 §36.2: each firing alert's rule and its Service's ExecutionRecord
+            symptom_captures = capture_symptoms(capture_adapter, alerts)
             window_end = self.clock()
             if self.reader is not None:
                 # the same proof as for a resolution (late-evidence-design.md §6): what the
@@ -1079,6 +1083,7 @@ class DiagnosisService:
                 evidence_coverage=lambda journal: self._evidence_coverage(
                     journal, starts_at, window_end, transport_proven_at
                 ),
+                symptom_captures=symptom_captures,
             ),
             timestamp=self.clock(),
         )
@@ -1089,6 +1094,7 @@ class DiagnosisService:
             alert_coverage = boundary.alert_coverage
             coverage = boundary.evidence_coverage
             trace_reads = boundary.trace_reads
+            frozen_symptoms = boundary.symptom_captures
         source = LiveSource(
             incident=str(incident_id),
             alert_items=[alert_from_payload(item) for item in members.alerts],
@@ -1107,6 +1113,7 @@ class DiagnosisService:
             alert_coverage=alert_coverage,
             evidence_coverage=coverage,
             trace_reads=trace_reads,
+            symptom_capture_items=frozen_symptoms,
         )
         bounded_policy = self.bounded_policy_factory()
         # The effective configs are explicit so the revision can record them.

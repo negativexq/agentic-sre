@@ -182,8 +182,8 @@ def _assess(
     onset: datetime | None,
 ) -> tuple[str | None, set[str], datetime | None]:
     rule, execution = capture.rule, capture.execution
-    # 1. captured
-    if rule.failed or execution is None or execution.failed:
+    # 1. captured: the rule first, since the ExecutionRecord is read only for a rule of the form
+    if rule.failed:
         return "NOT_CAPTURED", set(), None
     # 2. a counted request outcome, bound to the alert's own Service
     form = recognize(rule.expression)
@@ -192,6 +192,8 @@ def _assess(
     # 3. known timing
     if not rule.for_seconds or not rule.interval_seconds or rule.scrape_interval_seconds is None:
         return "TIMING_UNKNOWN", set(), None
+    if execution is None or execution.failed:
+        return "NOT_CAPTURED", set(), None
     # 4 and 5. requests refused at a peer that does not use the dependency, before reaching it
     services = [ref for ref in latest if ref.kind == "Service" and ref != dependency]
     to_dependency = set().union(*(declared_hosts(latest, caller, dependency) for caller in callers))

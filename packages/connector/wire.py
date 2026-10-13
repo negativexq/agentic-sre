@@ -39,6 +39,8 @@ Op = Literal[
     "list_objects",
     "list_events",
     "query_logs",
+    "query_alert_rule",
+    "query_execution_records",
     "query_resource_pressure",
     "query_traffic",
     "query_traces",
@@ -98,6 +100,23 @@ class LogArgs(WireModel):
     starts_at: datetime
     ends_at: datetime
     limit: int | None = Field(default=None, ge=1, le=64)
+
+
+class AlertRuleArgs(WireModel):
+    """m21 §36.2: one firing alert whose rule is read."""
+
+    alert: str = Field(min_length=1, max_length=256)
+    labels: dict[str, str] = Field(max_length=64)
+    at: datetime
+
+
+class ExecutionRecordArgs(WireModel):
+    """m21 §36.2: one service's ExecutionRecord over a window."""
+
+    namespace: str = Field(min_length=1, max_length=253)
+    service: str = Field(min_length=1, max_length=253)
+    starts_at: datetime
+    ends_at: datetime
 
 
 class ScopeWire(WireModel):

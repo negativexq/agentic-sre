@@ -43,6 +43,7 @@ from packages.rca.model import (
     PodStatusObservation,
     ProviderReadFailure,
     ResourcePressure,
+    SymptomCapture,
     TraceSpanObservation,
     TrafficObservation,
 )
@@ -458,6 +459,7 @@ class ReplaySource:
             alert_coverage=boundary.alert_coverage,
             evidence_coverage=boundary.evidence_coverage,
             trace_reads=boundary.trace_reads,
+            symptom_capture_items=boundary.symptom_captures,
         )
         return cls(
             run_id=run_id,
@@ -487,6 +489,9 @@ class ReplaySource:
 
     def trace_read_record(self) -> Sequence[TraceRead] | None:
         return self._base.trace_read_record()
+
+    def symptom_captures(self) -> Sequence[SymptomCapture]:
+        return self._base.symptom_captures()
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         return self._base.object_history()

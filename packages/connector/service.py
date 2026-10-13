@@ -218,6 +218,10 @@ class Connector:
             names.append("logs")
         if self.providers.prometheus is not None:
             names += ["resource_pressure", "traffic"]
+            if hasattr(self.providers.prometheus, "alert_rule"):
+                names.append("alert_rules")
+        if self.providers.loki is not None and hasattr(self.providers.loki, "execution_records"):
+            names.append("execution_records")
         if self.providers.tempo is not None:
             names.append("runtime_traces")
             if hasattr(self.providers.tempo, "fetching_once"):
@@ -860,6 +864,22 @@ class Connector:
                     logs.services, logs.starts_at, logs.ends_at, limit=logs.limit
                 ),
             )
+        if request.op == "query_alert_rule":
+            rule = _args(wire.AlertRuleArgs, args)
+            alert_rule = getattr(self.providers.prometheus, "alert_rule", None)
+            if alert_rule is None:
+                raise LookupError("prometheus backend does not serve alert rules")
+            return {"rule": alert_rule(rule.alert, rule.labels, rule.at)}
+        if request.op == "query_execution_records":
+            window = _args(wire.ExecutionRecordArgs, args)
+            execution_records = getattr(self.providers.loki, "execution_records", None)
+            if execution_records is None:
+                raise LookupError("loki backend does not serve ExecutionRecords")
+            return {
+                "entries": execution_records(
+                    window.namespace, window.service, window.starts_at, window.ends_at
+                )
+            }
         if request.op == "query_traces":
             traces = _args(wire.TraceQueryArgs, args)
             reader = self._tempo(traces.capture_scope)

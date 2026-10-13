@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -251,10 +252,40 @@ def _parse_series(item: object) -> PrometheusSeries:
     )
 
 
-def _parse_response(payload: Mapping[str, object]) -> tuple[PrometheusSeries, ...]:
+def _success(payload: Mapping[str, object]) -> Mapping[str, object]:
     if payload.get("status") != "success":
         raise PrometheusProtocolError("Prometheus response status was not success")
-    data = _mapping(payload.get("data"), "response data")
+    return _mapping(payload.get("data"), "response data")
+
+
+def _list(value: object, description: str) -> list[object]:
+    if not isinstance(value, list):
+        raise PrometheusProtocolError(f"Prometheus {description} must be a list")
+    return value
+
+
+# m21 §36.2: the counter selector of an alert expression, whose targets' scrape interval is read
+_COUNTER_SELECTOR = re.compile(r"[a-zA-Z_:][a-zA-Z0-9_:]*\{[^{}]*\}")
+_DURATION_PART = re.compile(r"(\d+)(ms|s|m|h|d)")
+_DURATION_UNITS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+
+
+def _target_key(labels: Mapping[str, object]) -> tuple[str, str]:
+    return _label(labels.get("job", ""), "job"), _label(labels.get("instance", ""), "instance")
+
+
+def _duration_seconds(value: object) -> float | None:
+    """A Prometheus duration (``5s``, ``1m30s``) in seconds; None for anything else."""
+    if not isinstance(value, str) or not value:
+        return None
+    parts = _DURATION_PART.findall(value)
+    if "".join(number + unit for number, unit in parts) != value:
+        return None
+    return sum(int(number) * _DURATION_UNITS[unit] for number, unit in parts)
+
+
+def _parse_response(payload: Mapping[str, object]) -> tuple[PrometheusSeries, ...]:
+    data = _success(payload)
     if data.get("resultType") != "matrix":
         raise PrometheusProtocolError("Prometheus response resultType must be matrix")
     raw_result = data.get("result")
@@ -302,16 +333,20 @@ class PrometheusMetricsReader:
     ) -> tuple[PrometheusSeries, ...]:
         if step_seconds < _MIN_QUERY_STEP_SECONDS:
             raise ValueError("Prometheus query step is too small")
-        url = f"{self.config.base_url}/api/v1/query_range?{
-            urlencode(
+        return _parse_response(
+            self._get(
+                "query_range",
                 {
-                    'query': promql,
-                    'start': _epoch_seconds(start),
-                    'end': _epoch_seconds(end),
-                    'step': step_seconds,
-                }
+                    "query": promql,
+                    "start": _epoch_seconds(start),
+                    "end": _epoch_seconds(end),
+                    "step": step_seconds,
+                },
             )
-        }"
+        )
+
+    def _get(self, path: str, params: Mapping[str, object]) -> Mapping[str, object]:
+        url = f"{self.config.base_url}/api/v1/{path}?{urlencode(params)}"
         request = Request(url, headers=self._headers(), method="GET")
         try:
             response = self._opener(request, timeout=self.config.timeout_seconds)
@@ -333,7 +368,68 @@ class PrometheusMetricsReader:
             decoded = json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise PrometheusProtocolError("Prometheus returned invalid JSON") from error
-        return _parse_response(_mapping(decoded, "response"))
+        return _mapping(decoded, "response")
+
+    def alert_rule(self, alert: str, labels: Mapping[str, str], at: datetime) -> dict[str, object]:
+        """m21 §36.2: the alerting rule as served now, its group's interval, and the scrape interval of the targets
+        whose series its counter selects at ``at``. ``expression`` is None unless exactly one rule of that name
+        carries labels the alert carries; ``scrape_interval_seconds`` is None unless every such target is listed."""
+        data = _success(self._get("rules", {"type": "alert"}))
+        found = [
+            (group, rule)
+            for group in _list(data.get("groups"), "rule groups")
+            for rule in _list(_mapping(group, "rule group").get("rules"), "rules")
+            if _mapping(rule, "rule").get("name") == alert
+            and all(
+                labels.get(key) == value
+                for key, value in _mapping(
+                    _mapping(rule, "rule").get("labels") or {}, "rule labels"
+                ).items()
+            )
+        ]
+        if len(found) != 1:
+            return {"expression": None, "rules_matched": len(found)}
+        group, rule = (_mapping(item, "rule") for item in found[0])
+        expression = rule.get("query")
+        if not isinstance(expression, str):
+            raise PrometheusProtocolError("Prometheus alerting rule lacks its query")
+        return {
+            "expression": expression,
+            "for_seconds": _finite_float(rule.get("duration", 0), "rule duration"),
+            "interval_seconds": _finite_float(group.get("interval"), "group interval"),
+            "scrape_interval_seconds": self._scrape_interval(expression, at),
+        }
+
+    def _scrape_interval(self, expression: str, at: datetime) -> float | None:
+        selector = _COUNTER_SELECTOR.search(expression)
+        if selector is None:
+            return None
+        series = _success(
+            self._get(
+                "query",
+                {"query": f"group by (job, instance) ({selector[0]})", "time": _epoch_seconds(at)},
+            )
+        )
+        selected = {
+            _target_key(_mapping(_mapping(entry, "series").get("metric"), "series metric"))
+            for entry in _list(series.get("result"), "query result")
+        }
+        if not selected:
+            return None
+        targets = _list(
+            _success(self._get("targets", {"state": "active"})).get("activeTargets"),
+            "active targets",
+        )
+        intervals = {
+            _target_key(_mapping(target.get("labels"), "target labels")): _duration_seconds(
+                target.get("scrapeInterval")
+            )
+            for target in (_mapping(item, "target") for item in targets)
+        }
+        found = [intervals.get(key) for key in selected]
+        if any(value is None for value in found):
+            return None
+        return max(value for value in found if value is not None)
 
     def query_resource_pressure(
         self, target: EntityRef, query: InvestigationQuery

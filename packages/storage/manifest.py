@@ -30,7 +30,7 @@ from packages.rca.alert_coverage import (
 )
 from packages.rca.evidence_coverage import EvidenceCoverage, TraceRead
 from packages.rca.manifest import ManifestEntry, manifest_membership_digest, ordered_entries
-from packages.rca.model import JournalEntry, LogRecord, TraceSpanObservation
+from packages.rca.model import JournalEntry, LogRecord, SymptomCapture, TraceSpanObservation
 from packages.rca.provider_adapter import PROVIDER_CAPABILITIES, ProviderIntegrityError
 from packages.storage.models import (
     AlertRow,
@@ -84,6 +84,8 @@ class ManifestRequest:
     alert_coverage_config: AlertCoverageConfig = field(default_factory=AlertCoverageConfig)
     # The object channel's coverage over the run's journal members, frozen with them (m21 §26.6).
     evidence_coverage: Callable[[Sequence[JournalEntry]], EvidenceCoverage] | None = None
+    # m21 §36.2: each firing alert's rule and its Service's ExecutionRecord, captured before the boundary
+    symptom_captures: tuple[SymptomCapture, ...] = ()
 
 
 def canonical_provider_capabilities(names: Sequence[str]) -> list[str]:
@@ -247,6 +249,16 @@ def build_manifest(
                     "alert_coverage": alert_coverage.to_payload(),
                     "trace_reads": [read.model_dump(mode="json") for read in trace_reads],
                     **(
+                        {
+                            "symptom_captures": [
+                                capture.model_dump(mode="json")
+                                for capture in request.symptom_captures
+                            ]
+                        }
+                        if request.symptom_captures
+                        else {}
+                    ),
+                    **(
                         {"evidence_coverage": evidence_coverage.model_dump(mode="json")}
                         if evidence_coverage is not None
                         else {}
@@ -316,6 +328,8 @@ class RunBoundary:
     evidence_coverage: EvidenceCoverage | None = None
     # The incident's trace reads frozen at the boundary (m21 §29); None for runs recorded before it.
     trace_reads: tuple[TraceRead, ...] | None = None
+    # m21 §36.2: the captured alert rules and ExecutionRecords; empty for runs recorded before them.
+    symptom_captures: tuple[SymptomCapture, ...] = ()
 
 
 def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
@@ -385,6 +399,15 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
             trace_reads = tuple(TraceRead.model_validate(read) for read in raw_reads)
         except ValueError as error:
             raise ReplayDataError(f"run {run_id} boundary trace_reads: {error}") from error
+    symptom_captures: tuple[SymptomCapture, ...] = ()
+    if "symptom_captures" in payload:
+        raw_captures = payload["symptom_captures"]
+        if not isinstance(raw_captures, list):
+            raise ReplayDataError(f"run {run_id} boundary symptom_captures is {raw_captures!r}")
+        try:
+            symptom_captures = tuple(SymptomCapture.model_validate(item) for item in raw_captures)
+        except ValueError as error:
+            raise ReplayDataError(f"run {run_id} boundary symptom_captures: {error}") from error
     return RunBoundary(
         run_id,
         rows[0].incident_id,
@@ -395,6 +418,7 @@ def load_run_boundary(session: Session, run_id: str) -> RunBoundary:
         alert_coverage,
         evidence_coverage,
         trace_reads,
+        symptom_captures,
     )
 
 

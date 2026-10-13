@@ -170,3 +170,12 @@ def test_the_code_identity_says_whether_tracked_files_changed(tmp_path: Path) ->
     assert clean["dirty"] == "false" and len(clean["commit"]) == 40
     (tmp_path / "a.py").write_text("x = 2\n")
     assert code_identity(tmp_path)["dirty"] == "true"
+
+
+def test_a_truncated_database_name_is_a_valid_label_value() -> None:
+    # dev26: the 60-character cut ended in "_" and Kubernetes refused the run label
+    name = testbed_lab.database_name("dev26-dependency-kafka-delay-dependency-delay-kafka-0")
+    assert name == "testbed_dev26_dependency_kafka_delay_dependency_delay_kafka"
+    assert testbed_lab.database_name("dev26b-negative-b-negative-image-decoy-0") == (
+        "testbed_dev26b_negative_b_negative_image_decoy_0"
+    )

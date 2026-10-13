@@ -112,8 +112,15 @@ class RealClock:
 
 
 def database_name(run_id: str) -> str:
-    """A safe PostgreSQL database name for one run; also the run's Kubernetes label value, which must end alphanumeric."""
-    return re.sub(r"[^a-z0-9_]", "_", f"testbed_{run_id}".lower())[:60].rstrip("_")
+    """A safe PostgreSQL database name for one run; also the run's Kubernetes label value, which must end alphanumeric.
+
+    A name longer than 60 characters keeps its first 51 and a digest of the whole name, so the repeat index it would
+    lose to the cut still separates the runs; a shorter name is unchanged.
+    """
+    name = re.sub(r"[^a-z0-9_]", "_", f"testbed_{run_id}".lower())
+    if len(name) <= 60:
+        return name.rstrip("_")
+    return f"{name[:51]}_{hashlib.sha256(name.encode()).hexdigest()[:8]}"
 
 
 _TARGET_SCRIPT = """
@@ -1869,6 +1876,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             acceptance=acceptance,
             engine_commit=args.engine_commit,
         ).frozen()
+        databases = [
+            database_name(f"{manifest.suite_id}-{spec.scenario_id}-{repeat}")
+            for spec in manifest.scenarios
+            for repeat in range(spec.repeats)
+        ]
+        if len(set(databases)) != len(databases):
+            raise SystemExit(
+                f"two runs of suite {args.suite} share a database name: {sorted(databases)}"
+            )
         print(TestbedStore(args.root).write_manifest(manifest), manifest.sha256)
         return 0
 

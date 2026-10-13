@@ -184,3 +184,16 @@ def test_a_long_database_name_keeps_its_runs_apart_and_is_a_valid_label_value() 
     assert testbed_lab.database_name("dev26b-negative-b-negative-image-decoy-0") == (
         "testbed_dev26b_negative_b_negative_image_decoy_0"
     )
+
+
+def test_the_kafka_delay_target_is_probed_at_kafka() -> None:
+    # dev23 and dev27: probing payment-service's /health never saw the delay on kafka's Pod (no target_effect_at)
+    world = testbed_lab.world_for(
+        {"dependency"}, testbed_lab.RealClock(), {"dependency-delay-kafka"}
+    )
+    assert '("kafka", 9092)' in world.target_script
+    assert "payment-service" not in world.target_script
+    other = testbed_lab.world_for(
+        {"dependency"}, testbed_lab.RealClock(), {"dependency-loss-payment"}
+    )
+    assert "kafka" not in other.target_script

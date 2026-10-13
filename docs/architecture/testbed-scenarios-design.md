@@ -2009,3 +2009,20 @@ instruments, so these families came twice for `order-service` and `payment-servi
 
 **Comparability.** Runs before and after differ in when those two alerts fire. Every `HOLDOUT` after this change
 says so, and none is compared with an earlier one on alert timing.
+
+## 40. The kafka-delay target is probed at kafka (2026-10-13, owner-approved)
+
+**Found** in `dev27`. In `dependency-delay-kafka` (m21 §31.5), the target probe still requested `payment-service`'s
+`/health`, which never reaches kafka. During the 1 s delay on kafka's Pod:
+- the probe stayed at 20–100 ms, under its 218 ms limit;
+- the `/orders` probe rose to 1.0–1.2 s.
+
+So `target_effect_at` was never stamped, and every run was `INVALID`: `dev23` 2/2, `dev27` 1/1.
+
+**Change.** For this scenario the target probe runs in `order-service`'s Pod and times opening a TCP connection to
+`kafka:9092`:
+- kafka answers no HTTP, but the delay applies to every packet of its Pod, the handshake included;
+- the baseline is a few ms;
+- the limit is calibrated from the baseline as for every probe.
+
+No other scenario's probe changes.

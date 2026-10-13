@@ -439,3 +439,21 @@ def test_the_rule_applies_only_to_a_dependency_of_the_alerts_own_service() -> No
 def test_one_sufficient_capture_answers_the_question() -> None:
     found = answer(capture(expression=None), capture())
     assert state(found) == (ANSWER, None, R)
+
+
+def test_the_sample_an_evaluation_used_is_visible_to_it() -> None:
+    # §36.7, dev26b negative-b: scraped 0.4 s before each evaluation in 3 ms, the sample is stored well before the
+    # evaluation; the refusals just before it are what made the alert pending
+    times = scrapes(offset=0.4)
+    requests = at_seconds(*(17.5 - k for k in range(17)))
+    found = answer(
+        capture(
+            requests, counter_series=[counter(times)], scrape_durations=[durations(times, 0.003)]
+        )
+    )
+    assert state(found) == (ANSWER, None, R)
+    assert found is not None and found.rule_version == "v3"
+    # a scrape still being stored at the evaluation is not visible to it
+    slow = durations(times, 0.36)
+    found = answer(capture(requests, counter_series=[counter(times)], scrape_durations=[slow]))
+    assert state(found) == ("OPEN", "NOT_SUFFICIENT", R)

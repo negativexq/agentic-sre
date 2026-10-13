@@ -3983,7 +3983,7 @@ Conditions 2 and 6 become:
   `service`, `route` and `status` besides those two. Otherwise `FORM_UNSUPPORTED`: a counter read through another
   exporter is not incremented with each terminal record.
 - **6.** At each evaluation `t` from `firing − for` to the firing, every `G`:
-  - a sample at `s` is **visible** at `t` when `s + d + ε ≤ t`, where `d` is the target's `scrape_duration_seconds`
+  - a sample at `s` is **visible** at `t` when `s + d + ε ≤ t` (§36.7 replaces `ε` here with `c`), where `d` is the target's `scrape_duration_seconds`
     at `s`. A sample without a duration is not visible.
   - for each series with at least two visible samples in `(t − R, t]` and no decrease between them, with `first`
     and `last` its first and last visible samples:
@@ -4004,3 +4004,29 @@ Conditions 2 and 6 become:
 **Unchanged:** every other condition, the answer, its uncertainties, and §3.
 
 **Measurement:** §36.5 again, with 2.15.0 replaced by 2.16.0 and `dev26` for the `DEV` checks.
+
+### 36.7 A sample is visible once its scrape is stored (owner-approved 2026-10-13; rule v3, engine 2.17.0)
+
+**Measured (`dev26b`, `DEV`, unscored; §36.6 live, one scrape path).**
+- **`dependency-b`:** `OPEN`, `NOT_SUFFICIENT` at the pending evaluation. That is correct. The two errors that
+  evaluation saw (36:04 and 36:05) were **timeouts** at `payment-service`; refusals began at 36:13. A timeout can
+  arise in the caller, so nothing answers it.
+- **`negative-b`:** `OPEN`, `NOT_SUFFICIENT` at the pending evaluation (47:14.192). That is too strict.
+  - Prometheus made the alert pending there on the sample scraped at 47:13.717 (`d` = 0.003 s). That sample held 8
+    refused requests (47:10).
+  - §36.6 counted that sample visible only when `s + d + ε ≤ t`, which here is 14.220 > 14.192. So the rule set
+    aside the very sample the evaluation used.
+
+**Amendment.** Visibility is `s + d + c ≤ t`, with `c` = 0.05 s:
+- `scrape_duration_seconds` covers the fetch, the parse and the append;
+- only the commit follows, and `c` bounds it.
+
+`ε` (0.5 s) stays where §36.6 needs it: the edges of the request window, the bound between a terminal record and the
+counter's increment. Nothing else changes.
+
+**Offline on `dev26b`:**
+- `negative-b` becomes `RESOLVED`, leader `Deployment/payment-service`, which is the run's cause;
+- `dependency-b` stays `OPEN` at the same evaluation.
+
+The amendment was found on a `DEV` result. It rests on how Prometheus stores a scrape, not on that result; the next
+`HOLDOUT` checks it.

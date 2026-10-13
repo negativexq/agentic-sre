@@ -1,14 +1,16 @@
 # Real OTLP → Loki/Tempo → capture manifest DEV measurement
 
-2026-10-14. Final capture C corroborated **90/90 failed-request relations** from records actually retrieved through the lab collector, Loki and Tempo. The capture survived the real manifest-builder/storage round trip unchanged. No RCA engine or RESOLVED rule was evaluated.
+2026-10-14. Final capture D corroborated **90/90 failed-request relations** from records actually retrieved through the lab collector, Loki and Tempo. The capture survived the real manifest-builder/storage round trip unchanged. No RCA engine or RESOLVED rule was evaluated.
 
 ## What changed as a result of measuring
 
 The first transport capture A delivered 210 error logs and 300 spans, but corroborated **0/90** relations. The log correlation attributes were present in Loki's stream labels. `LokiLogReader` previously read only JSON body/entry structured metadata, so its normalized records lost the IDs and failure/peer fields.
 
+The DEV probe is confined to `provider_adapter.py` and only permits fresh `binding-dev-order-<hex>` service names. The production reader-confinement regression guard is unchanged.
+
 The reader now also accepts allowlisted source assertions from stream labels. Conflicting body, entry metadata and stream-label values are omitted; no source takes precedence. No identity is inferred from message text or topology. The fix adds explanatory source attributes, not a causal support, admission, exclusion or frontier rule. Engine remains 2.18.0.
 
-After the fix, capture B corroborated 90/90. Final capture C repeated that result and automatically froze/reloaded the retrieved records through the production manifest builder. A/B/C remain separate artifacts; A was not overwritten or silently counted as successful.
+After the fix, capture B corroborated 90/90. Capture C repeated that result and automatically froze/reloaded the retrieved records through the production manifest builder. Final capture D repeated both checks after confining measurement reads to the provider boundary. A/B/C/D remain separate artifacts; A was not overwritten or silently counted as successful.
 
 ## Measurement protocol
 
@@ -18,7 +20,7 @@ An independent host driver makes 30 requests for each of five scenarios, with si
 
 Remote traces are discovered by service-name search, not fetched from a local list of expected trace IDs. The explicitly bounded DEV search and log limits are 500, with a 120-second availability deadline. This does not measure the engine's narrower per-query search budget. Snapshots, search metrics, source hashes and API responses are retained. Missing/truncated/provider-failed data must not be presented as negative causal evidence.
 
-## Final capture C results
+## Final capture D results
 
 | Scenario | Driver requests | Requests with remote dependency error log | Corroborated failed-symptom relation |
 |---|---:|---:|---:|
@@ -32,7 +34,7 @@ All expected failure types and HTTP outcomes matched in the independent source-r
 
 Tempo returned 150 discovered traces, 300 spans and a matching SERVER span for all 150 driver requests. Loki returned 210 error logs: 120 dependency failures plus 90 HTTP symptom error logs. All 120 expected dependency-failure requests had their remote log. Neither discovery/result limit was reached. Missing trace fetch count was zero in the final snapshot.
 
-The first two C snapshots had the logs but no discoverable traces. The third snapshot, about 12 seconds after the first, had all traces. This is observed discovery availability under these polling intervals, not a latency percentile or a proof that an earlier empty response meant no operation occurred.
+The first two D snapshots had the logs but no discoverable traces. The third snapshot, about 13 seconds after the first, had all traces. This is observed discovery availability under these polling intervals, not a latency percentile or a proof that an earlier empty response meant no operation occurred.
 
 ## Manifest round trip and authority
 
@@ -42,7 +44,7 @@ The label is `VERIFIED_CAPTURE_MANIFEST_ROUNDTRIP`, distinct from verification a
 
 ## Artifacts and reproduction
 
-Final capture: `.local/diagnostics/otlp-binding-dev-20261014-c/`.
+Final capture: `.local/diagnostics/otlp-binding-dev-20261014-d/`.
 
 - `transport-protocol.json`, `source-snapshot/`: pre-traffic bounds and source hashes/snapshots.
 - `source-reference/driver-ledger.json`: full independent request denominator.

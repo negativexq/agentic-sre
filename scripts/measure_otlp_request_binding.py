@@ -18,13 +18,11 @@ from packages.evals.frozen_request_binding import (
     corroborate_frozen_requests,
 )
 from packages.rca.investigation.tempo import (
-    TempoConfig,
     TempoHttpError,
-    TempoTraceReader,
     parse_tempo_trace_json,
 )
-from packages.rca.live import LokiLogReader
 from packages.rca.model import TraceSpanObservation
+from packages.rca.provider_adapter import DevelopmentTransportProbe
 from scripts.measure_local_request_binding import measure
 
 
@@ -49,6 +47,7 @@ def capture(
         "scripts/measure_local_request_binding.py",
         "packages/rca/live.py",
         "packages/rca/log_attributes.py",
+        "packages/rca/provider_adapter.py",
         "packages/evals/measurement_capture_manifest.py",
     ]
     protocol["source_sha256"] = {
@@ -64,8 +63,7 @@ def capture(
         (output / "source-reference/frozen-evidence.json").read_text()
     )
     ledger = json.loads((output / "source-reference/driver-ledger.json").read_text())
-    reader = TempoTraceReader(TempoConfig(tempo))
-    logs_reader = LokiLogReader(loki, limit=500)
+    probe = DevelopmentTransportProbe(loki, tempo)
     deadline = time.monotonic() + wait_seconds
     attempts = []
     frozen = None
@@ -74,17 +72,8 @@ def capture(
     while True:
         poll += 1
         end = datetime.now(UTC) + timedelta(seconds=1)
-        logs = logs_reader.error_logs([source.caller_service], source.episode_start, end)
-        search = reader._get_json(
-            "/api/search",
-            {
-                "q": '{ resource.service.name = "' + source.caller_service + '" }',
-                "start": int(source.episode_start.timestamp()) - 1,
-                "end": int(end.timestamp()),
-                "limit": 500,
-            },
-            1_048_576,
-        )
+        logs = probe.error_logs(source.caller_service, source.episode_start, end)
+        search = probe.search(source.caller_service, source.episode_start, end)
         raw_traces = search.get("traces", [])
         if not isinstance(raw_traces, list):
             raise ValueError("Malformed Tempo discovery result")
@@ -99,7 +88,7 @@ def capture(
         )
         for trace_id in trace_ids:
             try:
-                payload = reader._get_json(f"/api/v2/traces/{trace_id}", {}, 4_194_304)
+                payload = probe.trace(trace_id)
             except TempoHttpError as error:
                 if error.status_code != 404:
                     raise

@@ -545,3 +545,19 @@ def test_production_reader_names_are_confined_to_the_provider_boundary() -> None
                     violations.append(f"{relative}:{node.lineno}: accesses {node.attr}")
 
     assert violations == []
+
+
+def test_development_transport_probe_cannot_read_production_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.rca.provider_adapter import DevelopmentTransportProbe
+
+    probe = DevelopmentTransportProbe("http://unused-loki", "http://unused-tempo")
+    monkeypatch.setattr(type(probe._traces), "_get_json", lambda *args, **kwargs: {"traces": []})
+    assert probe.search("binding-dev-order-1234abcd", T0, T0) == {"traces": []}
+    with pytest.raises(ValueError, match="DEV"):
+        probe.search("payment-service", T0, T0)
+    with pytest.raises(ValueError, match="DEV"):
+        probe.error_logs("order-service", T0, T0)
+    with pytest.raises(ValueError, match="zoned"):
+        probe.search("binding-dev-order-1234abcd", T0.replace(tzinfo=None), T0)

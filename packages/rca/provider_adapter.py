@@ -691,3 +691,52 @@ __all__ = [
     "traffic_descriptor",
     "provider_query_key",
 ]
+
+
+class DevelopmentTransportProbe:
+    """Bounded, DEV-service-only transport capture at the provider boundary.
+
+    No production adapter registration or decision authority. The measurement
+    caller persists raw responses/read snapshots; it does not claim RCA tape
+    replay. Kubernetes production searches keep their existing budgets.
+    """
+
+    def __init__(self, loki_url: str, tempo_url: str) -> None:
+        from packages.rca.investigation.tempo import TempoConfig, TempoTraceReader
+        from packages.rca.live import LokiLogReader
+
+        self._logs = LokiLogReader(loki_url, limit=500)
+        self._traces = TempoTraceReader(TempoConfig(tempo_url))
+
+    @staticmethod
+    def _service(service: str) -> None:
+        if not re.fullmatch(r"binding-dev-order-[0-9a-f]{8}", service):
+            raise ValueError("Transport probe is restricted to isolated binding DEV services")
+
+    def error_logs(self, service: str, start: datetime, end: datetime) -> list[LogRecord]:
+        self._service(service)
+        return self._logs.error_logs([service], start, end)
+
+    def search(self, service: str, start: datetime, end: datetime) -> Mapping[str, object]:
+        self._service(service)
+        if (
+            start.utcoffset() is None
+            or end.utcoffset() is None
+            or not 0 <= (end - start).total_seconds() <= 3600
+        ):
+            raise ValueError("DEV transport search requires a zoned window <= 3600 seconds")
+        return self._traces._get_json(
+            "/api/search",
+            {
+                "q": '{ resource.service.name = "' + service + '" }',
+                "start": int(start.timestamp()) - 1,
+                "end": int(end.timestamp()),
+                "limit": 500,
+            },
+            1_048_576,
+        )
+
+    def trace(self, trace_id: str) -> Mapping[str, object]:
+        if not re.fullmatch(r"[0-9a-f]{16,32}", trace_id):
+            raise ValueError("Invalid DEV trace identity")
+        return self._traces._get_json(f"/api/v2/traces/{trace_id}", {}, 4_194_304)

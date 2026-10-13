@@ -37,7 +37,9 @@ REFUSALS = frozenset({"ConnectionRefusedError", "ECONNREFUSED"})
 # §36.6: the counter's labels besides its target, and the bound between a terminal record and the counter's increment
 COUNTER_LABELS = frozenset({"job", "instance", "service", "route", "status"})
 MARGIN = timedelta(seconds=0.5)
-RULE_VERSION = "v2"
+# §36.7: a sample is stored once its scrape's own duration has passed and the append is committed
+COMMIT = timedelta(seconds=0.05)
+RULE_VERSION = "v3"
 
 _FORM = re.compile(
     r"^\s*sum\s*\(\s*rate\s*\(\s*(?P<counter>[a-zA-Z_:][a-zA-Z0-9_:]*)\s*\{(?P<selector>[^{}]*)\}"
@@ -262,7 +264,7 @@ def _assess(
                 for sample in series.samples
                 if tick - range_ < sample.at <= tick
                 and sample.at in durations
-                and sample.at + timedelta(seconds=durations[sample.at]) + MARGIN <= tick
+                and sample.at + timedelta(seconds=durations[sample.at]) + COMMIT <= tick
             ]
             if len(visible) < 2 or any(
                 b.value < a.value for a, b in zip(visible, visible[1:], strict=False)

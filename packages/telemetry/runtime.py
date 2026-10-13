@@ -24,6 +24,7 @@ from opentelemetry.trace import SpanKind
 from prometheus_client import CollectorRegistry
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from packages.telemetry.correlation import request_context
 from packages.telemetry.execution import ExecutionRecordProcessor, record_start, record_terminal
 from packages.telemetry.metrics import WorkloadMetrics
 
@@ -38,14 +39,27 @@ class JsonLogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         span_context = trace.get_current_span().get_span_context()
         payload: dict[str, object] = {
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "service": self._service_name,
             "level": record.levelname,
             "event": record.getMessage(),
             "request_id": getattr(record, "request_id", None),
-            "trace_id": format(span_context.trace_id, "032x") if span_context.is_valid else None,
-            "span_id": format(span_context.span_id, "016x") if span_context.is_valid else None,
+            "trace_id": getattr(record, "trace_id", None)
+            or (format(span_context.trace_id, "032x") if span_context.is_valid else None),
+            "span_id": getattr(record, "span_id", None)
+            or (format(span_context.span_id, "016x") if span_context.is_valid else None),
         }
+        for key in (
+            "parent_span_id",
+            "dependency.name",
+            "http.request.method",
+            "server.address",
+            "error.type",
+            "http.response.status_code",
+        ):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
         return json.dumps(payload, separators=(",", ":"))
 
 
@@ -339,7 +353,7 @@ class TelemetryMiddleware:
                 f"{method} {path}", context=parent_context, kind=SpanKind.SERVER
             )
         )
-        with span_context as span:
+        with span_context as span, request_context(request_id):
             span.set_attribute("http.request.method", method)
             span.set_attribute("url.path", path)
             span.set_attribute("http.request.header.x_request_id", request_id)
@@ -370,7 +384,11 @@ class TelemetryMiddleware:
                         # backend can find them without parsing structured fields.
                         self.runtime.logger.error(
                             f"http.request error: {method} {path} returned {status_code}",
-                            extra={"request_id": request_id},
+                            extra={
+                                "request_id": request_id,
+                                "http.request.method": method,
+                                "http.response.status_code": status_code,
+                            },
                         )
                     else:
                         self.runtime.logger.info(

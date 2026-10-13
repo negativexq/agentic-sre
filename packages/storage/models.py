@@ -572,6 +572,7 @@ class LogObservationRow(Base):
     ingested_at: Mapped[datetime | None] = _ingested_at()
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     message: Mapped[str] = mapped_column(String(4000), nullable=False)
+    attributes: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
     evidence_id: Mapped[str] = mapped_column(String(512), nullable=False)
     dedup_key: Mapped[str] = mapped_column(String(64), nullable=False)
     source_system: Mapped[str] = mapped_column(String(255), nullable=False, default="loki")

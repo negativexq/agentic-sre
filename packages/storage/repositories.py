@@ -673,17 +673,16 @@ class LogObservationRepository:
 
     @staticmethod
     def _dedup_key(record: LogRecord) -> str:
-        value = json.dumps(
-            {
-                "service": record.service,
-                "at": record.at.isoformat() if record.at is not None else None,
-                "severity": record.severity,
-                "message": record.message,
-                "evidence_id": record.evidence_id,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        fields: dict[str, Any] = {
+            "service": record.service,
+            "at": record.at.isoformat() if record.at is not None else None,
+            "severity": record.severity,
+            "message": record.message,
+            "evidence_id": record.evidence_id,
+        }
+        if record.attributes:
+            fields["attributes"] = record.attributes
+        value = json.dumps(fields, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(value.encode()).hexdigest()
 
     def record(
@@ -717,6 +716,7 @@ class LogObservationRepository:
                     observed_at=observed_at,
                     severity=record.severity,
                     message=record.message[:4000],
+                    attributes=dict(record.attributes) or None,
                     evidence_id=record.evidence_id[:512],
                     dedup_key=dedup_key,
                     source_system=source_system,
@@ -944,6 +944,7 @@ def _log_record(row: LogObservationRow) -> LogRecord:
         severity=row.severity,
         message=row.message,
         evidence_id=row.evidence_id,
+        attributes=row.attributes or {},
     )
 
 

@@ -12,6 +12,7 @@ from opentelemetry import context as otel_context
 from opentelemetry import propagate, trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
 
+from packages.telemetry.correlation import correlation_fields, current_request_id, span_id
 from workload.common.contracts import (
     EventTopic,
     OrderCreatedEvent,
@@ -88,12 +89,17 @@ class HttpPaymentGateway:
             if self._runtime is not None
             else nullcontext(trace.INVALID_SPAN)
         )
+        parent_span_id = span_id()
         host = peer_host(self._base_url)
         started = perf_counter()
         try:
             with span_context as span:
                 try:
                     headers = {"Content-Type": "application/json"}
+                    request_id = current_request_id()
+                    if request_id is not None:
+                        headers["x-request-id"] = request_id
+                        span.set_attribute("http.request.header.x_request_id", request_id)
                     propagate.inject(headers)
                     http_request = Request(
                         f"{self._base_url}/payments",
@@ -118,6 +124,8 @@ class HttpPaymentGateway:
                         self._runtime.logger.error(
                             f"dependency.request error: payment-service {type(exc).__name__}: {exc}",
                             extra={
+                                **correlation_fields(parent_span_id),
+                                "dependency.name": "payment-service",
                                 "http.request.method": "POST",
                                 "server.address": host,
                                 "error.type": kind,

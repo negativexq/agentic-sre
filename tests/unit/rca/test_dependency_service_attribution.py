@@ -120,3 +120,25 @@ def test_an_independent_pod_failure_keeps_its_own_claim_and_provenance() -> None
         for claim in claims
         for finding in claim.findings
     )
+
+
+def test_correlation_assertions_do_not_change_rca_or_digest() -> None:
+    observed = source(3, pod_failure=True)
+    before = diagnose_case(build_case(observed))
+    observed.error_items = [
+        item.model_copy(
+            update={
+                "attributes": {
+                    "request_id": "req-current",
+                    "trace_id": "a" * 32,
+                    "span_id": "b" * 16,
+                    "parent_span_id": "c" * 16,
+                    "server.address": "payment",
+                    "error.type": "ConnectionRefusedError",
+                }
+            }
+        )
+        for item in observed.error_items
+    ]
+    after = diagnose_case(build_case(observed))
+    assert after.model_dump(mode="json") == before.model_dump(mode="json")

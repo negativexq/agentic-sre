@@ -168,6 +168,15 @@ class LogRecord(BaseModel):
     severity: str
     message: str
     evidence_id: str
+    # Source assertions only; never admission or target-Pod authority.
+    attributes: dict[str, str] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _legacy_shape(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if not self.attributes:
+            value.pop("attributes", None)
+        return value
 
 
 # m21 §30: the resource read starts this long before the baseline gap; its first such span is

@@ -21,6 +21,7 @@ from workload.common.adapters import HttpPaymentGateway
 from workload.common.contracts import PaymentRequest
 
 from packages.telemetry import TelemetryContext, WorkloadMetrics, create_runtime, structured_log
+from packages.telemetry.correlation import request_context
 from packages.telemetry.runtime import TelemetryMiddleware, TelemetryRuntime
 
 
@@ -204,10 +205,12 @@ def test_payment_calls_are_client_spans_that_parent_the_server_span() -> None:
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     runtime.tracer = provider.get_tracer("test")
     seen: list[str] = []
+    seen_request_ids: list[str | None] = []
 
     class _Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - http.server hook
             seen.append(self.headers.get("traceparent", ""))
+            seen_request_ids.append(self.headers.get("x-request-id"))
             self.send_response(503)
             self.end_headers()
 
@@ -220,7 +223,7 @@ def test_payment_calls_are_client_spans_that_parent_the_server_span() -> None:
     gateway = HttpPaymentGateway(
         f"http://127.0.0.1:{server.server_address[1]}", timeout_seconds=2, runtime=runtime
     )
-    with pytest.raises(URLError):
+    with request_context("payment-request-correlation"), pytest.raises(URLError):
         gateway.charge(PaymentRequest(order_id=uuid4(), amount_cents=100, currency="USD"))
     thread.join()
     server.server_close()
@@ -233,6 +236,9 @@ def test_payment_calls_are_client_spans_that_parent_the_server_span() -> None:
     # The propagated parent is the CLIENT span itself.
     (traceparent,) = seen
     assert traceparent.startswith(f"00-{span.context.trace_id:032x}-{span.context.span_id:016x}-")
+
+    assert seen_request_ids == ["payment-request-correlation"]
+    assert span.attributes["http.request.header.x_request_id"] == "payment-request-correlation"
 
 
 def test_readiness_probe_answers_are_not_request_signals() -> None:

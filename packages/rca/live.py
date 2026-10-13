@@ -23,6 +23,7 @@ from packages.rca.investigation.environment import (
     TempoInvestigationBackend,
 )
 from packages.rca.json_access import child, object_content_hash
+from packages.rca.log_attributes import source_log_attributes
 from packages.rca.model import (
     CLUSTER_SCOPE,
     Alert,
@@ -476,6 +477,9 @@ class LokiLogReader:
                         at=datetime.fromtimestamp(int(entry[0]) / 1e9, tz=UTC),
                         severity=str(labels.get("level") or labels.get("detected_level") or ""),
                         message=str(entry[1])[:300],
+                        attributes=source_log_attributes(
+                            str(entry[1]), entry[2] if len(entry) > 2 else None
+                        ),
                         evidence_id=f"loki:{service}:{entry[0]}:{index}",
                     )
                 )

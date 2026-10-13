@@ -28,3 +28,7 @@ The source observations argument is optional. JSON, JSONL and diagnosis export w
 ## Before any authority change
 
 A separate contract and discriminating positive evidence are required before deciding admission or materiality. Validate pre-onset persistent faults, intermittent failures with successful baseline calls, old initiating configuration, multiple replicas, missing trace/export data, unknown target UID and simultaneous historical/current faults. Keep frozen HOLDOUT23 historical results unchanged; validate any future decision rule on a new independent holdout.
+
+## Development binding contract
+
+The next evidence shape and counterexamples are specified in [episode-binding-evidence-contract.md](episode-binding-evidence-contract.md). Its separate checker validates explicit frozen assertions for current request relationships and same-fault observations. It does not populate v1's UNASSESSED continuation/recovery fields, authenticate telemetry, or change admission/materiality.

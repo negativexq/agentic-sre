@@ -974,7 +974,12 @@ def explicitly_names_dependency(message: str, dependency_name: str) -> bool:
 def dependency_findings(
     logs: Sequence[LogRecord], topology: Topology, alerting: set[EntityRef]
 ) -> list[Finding]:
-    """Declared dependencies of alerting callers that log connection errors."""
+    """Caller connection errors attributed to a declared Service, never its selected Pods.
+
+    LogRecord identifies a service, not the destination Pod of a particular call. A selector
+    describes possible endpoints; it cannot bind this observation to any of those instances.
+    Exact Pod failures remain the responsibility of instance-bound events and runtime evidence.
+    """
     errors: dict[str, list[LogRecord]] = {}
     for record in logs:
         if _CONNECTION_ERROR.search(record.message):
@@ -1020,29 +1025,26 @@ def dependency_findings(
             if len(specific) == 1:
                 blamed = {specific[0]: records}
         for service, named in blamed.items():
-            pods = topology.outgoing(service, "selects")
-            targets = pods or (service,)
             times = [r.at for r in named if r.at is not None]
-            for target in targets:
-                findings.append(
-                    Finding(
-                        kind=FindingKind.DEPENDENCY_ERRORS,
-                        entity=target,
-                        at=max(times) if times else None,
-                        summary=(
-                            f"{caller.name} logged {len(named)} connection error(s) and depends "
-                            f"on {service.name}: {named[-1].message[:120]}"
-                        ),
-                        evidence_ids=tuple(r.evidence_id for r in named[:4]),
-                        related=(service,),
-                        details={
-                            "caller": caller.canonical,
-                            "service": service.canonical,
-                            "errors": len(named),
-                            "dependencies_of_caller": len(topology.outgoing(caller, "calls")),
-                        },
-                    )
+            findings.append(
+                Finding(
+                    kind=FindingKind.DEPENDENCY_ERRORS,
+                    entity=service,
+                    at=max(times) if times else None,
+                    summary=(
+                        f"{caller.name} logged {len(named)} connection error(s) and depends "
+                        f"on {service.name}: {named[-1].message[:120]}"
+                    ),
+                    evidence_ids=tuple(r.evidence_id for r in named[:4]),
+                    related=(service,),
+                    details={
+                        "caller": caller.canonical,
+                        "service": service.canonical,
+                        "errors": len(named),
+                        "dependencies_of_caller": len(topology.outgoing(caller, "calls")),
+                    },
                 )
+            )
     return findings
 
 

@@ -1,0 +1,92 @@
+[
+  {
+    "case": "negative-b-0",
+    "source": "HOLDOUT23 final diagnosis; message excerpt and subjects, not a full replay capture",
+    "caller": "sre-demo/Deployment/order-service",
+    "service": "sre-demo/Service/payment-service",
+    "pod_subjects": [
+      {
+        "kind": "Pod",
+        "name": "payment-service-74f5f9cc44-bbqtw",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-7c5f9bd7fd-92fv2",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-7c5f9bd7fd-fxxdv",
+        "namespace": "sre-demo"
+      }
+    ],
+    "message_excerpt": "dependency.request error: payment-service URLError: <urlopen error timed out>",
+    "evidence_ids": [
+      "loki:order-service:1791897708084238336:0",
+      "loki:order-service:1791897708279672320:0",
+      "loki:order-service:1791897709318904320:0",
+      "loki:order-service:1791897714537852416:0"
+    ]
+  },
+  {
+    "case": "negative-b-1",
+    "source": "HOLDOUT23 final diagnosis; message excerpt and subjects, not a full replay capture",
+    "caller": "sre-demo/Deployment/order-service",
+    "service": "sre-demo/Service/payment-service",
+    "pod_subjects": [
+      {
+        "kind": "Pod",
+        "name": "payment-service-6cfdfdb5f4-f45ln",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-85d9fdcbdf-5k22w",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-85d9fdcbdf-rh7md",
+        "namespace": "sre-demo"
+      }
+    ],
+    "message_excerpt": "dependency.request error: payment-service URLError: <urlopen error [Errno 111] Connection refused>",
+    "evidence_ids": [
+      "loki:order-service:1791898395219220224:0",
+      "loki:order-service:1791898395220244480:0",
+      "loki:order-service:1791898410166741760:0",
+      "loki:order-service:1791898410167295744:0"
+    ]
+  },
+  {
+    "case": "config-b-2",
+    "source": "HOLDOUT23 final diagnosis; message excerpt and subjects, not a full replay capture",
+    "caller": "sre-demo/Deployment/order-service",
+    "service": "sre-demo/Service/payment-service",
+    "pod_subjects": [
+      {
+        "kind": "Pod",
+        "name": "payment-service-5bd8c8bc8b-wmsmw",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-7575d86694-kbdnp",
+        "namespace": "sre-demo"
+      },
+      {
+        "kind": "Pod",
+        "name": "payment-service-7575d86694-wbklb",
+        "namespace": "sre-demo"
+      }
+    ],
+    "message_excerpt": "dependency.request error: payment-service URLError: <urlopen error [Errno 111] Connection refused>",
+    "evidence_ids": [
+      "loki:order-service:1791897046535874816:0",
+      "loki:order-service:1791897048586949632:0",
+      "loki:order-service:1791897048587479808:0",
+      "loki:order-service:1791897053745681664:0"
+    ]
+  }
+]

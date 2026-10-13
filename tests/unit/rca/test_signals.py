@@ -216,7 +216,7 @@ def test_connection_errors_blame_the_only_specific_dependency() -> None:
         )
     ]
     findings = dependency_findings(logs, topology, {ref("shop/Deployment/cart")})
-    assert [f.entity for f in findings] == [ref("shop/Pod/cart-db-5d8f7c9b4-abcde")]
+    assert [f.entity for f in findings] == [ref("shop/Service/cart-db")]
     assert findings[0].related == (ref("shop/Service/cart-db"),)
 
 

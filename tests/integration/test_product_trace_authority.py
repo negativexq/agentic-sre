@@ -440,7 +440,6 @@ def test_an_exact_uid_chain_carries_trace_evidence_to_m16_authority(
         pytest.param(None, (POD_UID,), False, UNRESOLVED, id="span-uid-missing"),
         pytest.param(OTHER_UID, (POD_UID,), False, UNRESOLVED, id="span-uid-wrong"),
         pytest.param(POD_UID, (None,), False, VERIFIED, id="finding-uid-missing"),
-        pytest.param(POD_UID, (OTHER_UID,), False, VERIFIED, id="finding-uid-mismatch"),
         pytest.param(POD_UID, (POD_UID, OTHER_UID), False, VERIFIED, id="finding-multi-uid"),
         pytest.param(POD_UID, (POD_UID,), True, CONTRADICTED, id="span-uid-deleted"),
     ],
@@ -485,6 +484,33 @@ def test_a_broken_uid_chain_gives_no_pod_authority(
         else:
             assert role.verified_incoming_edges == 0
             assert role.role not in M16_ROLES
+    assert run.replays("trajectory")
+    assert run.replays("selector")
+
+
+def test_service_logs_do_not_create_a_current_pod_claim_from_another_instances_event(
+    setup: Any,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = _run(
+        setup,
+        monkeypatch,
+        ProtocolTempo(client_uid=POD_UID),
+        event_uids=(OTHER_UID,),
+    )
+    # The event belongs to another instance. Caller logs only name the Service;
+    # they must not invent an unbound claim on the current Pod to trigger a read.
+    entries = [
+        entry
+        for entry in run.investigated.document["hypothesis_inventory"]
+        if entry["causal_actor"] == POD
+    ]
+    assert entries
+    assert all(entry["instance_uids"] == [OTHER_UID] for entry in entries)
+    assert not run.tempo_reads
+    assert not run.tempo.requests
+    trace = run.investigated.document["resolution_trace"]
+    assert not any(item.get("code") == PROPAGATED_EFFECT for item in trace["eliminations"])
     assert run.replays("trajectory")
     assert run.replays("selector")
 

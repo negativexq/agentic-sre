@@ -4048,3 +4048,29 @@ already hold. Replay reads them from the run's boundary as before. Nothing in th
 **Offline on `dev26b`:**
 - the `OrderErrorRateHigh` incident's final run becomes `RESOLVED`, with leader `Deployment/payment-service`;
 - every `dependency-b` incident stays unanswered.
+
+## 37. A caller's dependency log names a Service, not every selected Pod (2026-10-14; engine 2.18.0)
+
+**Finding.** In HOLDOUT23's final `OrderErrorRateHigh` diagnoses (`negative-b`, seeds 530 and 531;
+`config-b`, seed 529), §36 answers the Kafka question, but Payment Pods remain unresolved competitors.
+`dependency_findings` assigned the same caller log evidence to every Pod selected by Payment's Service.
+The caller's log identifies the Service; it does not identify the Pod that handled or refused the call.
+The strong Deployment claim holds rollout journal/event evidence, so §24 cannot explain the new log facts
+merely by shared evidence. Service selection and ownership do not prove the causal origin of those errors.
+
+**Correction (user-authorized).** `dependency_findings` emits `DEPENDENCY_ERRORS` on the declared Service.
+It does not copy caller logs onto selected Pods, even when exactly one Pod is selected. `LogRecord` carries
+no target Pod UID or request-bound target identity. Instance-bound Pod events and runtime trace
+normalization keep their existing attribution. Dependency name matching, caller/dependency scope, log
+provenance and the unnamed-error fallback are unchanged.
+
+**Authority.** This changes the subject of a finding and therefore may change claim membership, ranking
+and diagnosis digests; engine 2.18.0 versions that change. It adds no explanation, exclusion or frontier
+rule. A Service claim can remain unresolved. All four resolution conditions, including §36's conditions,
+remain unchanged. Stored HOLDOUT23 records and their engine version remain untouched; old-version replay
+is still subject to the existing version gate.
+
+**Validation.** Regression tests cover zero, one and multiple endpoints, Service-only log claims,
+retention of independent Pod failure evidence, and the existing runtime trace Pod attribution.
+These are development checks, not a new independent HOLDOUT or proof that the affected final incidents
+now resolve. Any later rollout-to-Service-error explanation needs its own evidence contract and validation.

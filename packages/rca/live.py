@@ -36,6 +36,7 @@ from packages.rca.model import (
     PodStatusObservation,
     ProviderReadFailure,
     ResourcePressure,
+    SymptomCapture,
     TraceSpanObservation,
     TrafficObservation,
     object_key,
@@ -480,6 +481,67 @@ class LokiLogReader:
                 )
         return records[:result_limit]
 
+    def execution_records(
+        self, namespace: str, service: str, starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, str]]:
+        """m21 §36.2: every ExecutionRecord entry of one service in the window, paged forward; each entry is its
+        ``EXECUTION_RECORD_FIELDS`` of its labels and structured metadata, plus ``timestamp_ns``. A window holding more than
+        ``EXECUTION_RECORD_MAX_ENTRIES`` is an error, never a cut."""
+        if (
+            starts_at.tzinfo is None
+            or ends_at.tzinfo is None
+            or ends_at < starts_at
+            or ends_at - starts_at > LOKI_MAX_QUERY_SPAN
+        ):
+            raise ValueError("Loki query requires an ordered timezone-aware window <= 3600 seconds")
+        for name in (namespace, service):
+            if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", name):
+                raise ValueError(f"invalid Loki label value {name!r}")
+        query = f'{{service_name="{service}", k8s_namespace_name="{namespace}"}} |= "execution."'
+        cursor, stop = int(starts_at.timestamp() * 1e9), int(ends_at.timestamp() * 1e9)
+        seen: dict[tuple[int, str], dict[str, str]] = {}
+        while True:
+            params = {
+                "query": query,
+                "start": str(cursor),
+                "end": str(stop),
+                "limit": str(EXECUTION_RECORD_PAGE),
+                "direction": "forward",
+            }
+            request = Request(
+                f"{self.base_url.rstrip('/')}/loki/api/v1/query_range?{urlencode(params)}",
+                method="GET",
+            )
+            with self.opener(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read(50_000_001))
+            page = [
+                (
+                    int(value[0]),
+                    {str(k): str(v) for k, v in child(stream, "stream").items()},
+                    str(value[1]),
+                )
+                for stream in child(payload, "data").get("result") or []
+                for value in stream.get("values") or []
+                if isinstance(value, list) and len(value) >= 2
+            ]
+            for at_ns, labels, line in page:
+                key = (at_ns, json.dumps(labels, sort_keys=True) + line)
+                seen[key] = {
+                    **{k: v for k, v in labels.items() if k in EXECUTION_RECORD_FIELDS},
+                    "timestamp_ns": str(at_ns),
+                }
+            if len(seen) > EXECUTION_RECORD_MAX_ENTRIES:
+                raise ValueError(
+                    f"more than {EXECUTION_RECORD_MAX_ENTRIES} ExecutionRecord entries"
+                )
+            if len(page) < EXECUTION_RECORD_PAGE:
+                return [seen[key] for key in sorted(seen)]
+            last = max(at_ns for at_ns, _, _ in page)
+            if last == cursor:
+                raise ValueError("a page of ExecutionRecord entries shares one nanosecond")
+            # the last nanosecond is read again; its duplicates are dropped by key
+            cursor = last
+
 
 def _entity(body: Mapping[str, Any]) -> EntityRef | None:
     metadata = child(body, "metadata")
@@ -640,6 +702,8 @@ class LiveSource:
     evidence_coverage: EvidenceCoverage | None = None
     # The incident's trace reads frozen at the run boundary (m21 §29).
     trace_reads: Sequence[TraceRead] | None = None
+    # m21 §36.2: the captured alert rules and ExecutionRecords frozen at the run boundary.
+    symptom_capture_items: Sequence[SymptomCapture] = ()
     # Persisted ``event:<version_pk>`` ids, one per ``event_bodies`` item.
     event_evidence_ids: Sequence[str] | None = None
     # Spans captured for the incident and frozen by the run's manifest (live-trace-design.md §3).
@@ -664,6 +728,9 @@ class LiveSource:
 
     def trace_read_record(self) -> Sequence[TraceRead] | None:
         return self.trace_reads
+
+    def symptom_captures(self) -> Sequence[SymptomCapture]:
+        return self.symptom_capture_items
 
     def object_history(self) -> Mapping[EntityRef, Sequence[ObjectVersion]]:
         """Journal versions plus the run's persisted snapshot cycle.
@@ -841,6 +908,23 @@ class LiveSource:
 
 
 LOKI_MAX_QUERY_SPAN = timedelta(hours=1)
+# m21 §36.2: an ExecutionRecord read's page, and the entries one window may hold
+EXECUTION_RECORD_PAGE = 2000
+EXECUTION_RECORD_MAX_ENTRIES = 100_000
+EXECUTION_RECORD_FIELDS = frozenset(
+    {
+        "execution_record",
+        "trace_id",
+        "k8s_pod_uid",
+        "http_response_status_code",
+        "execution_operation_kind",
+        "execution_operation_outcome",
+        "execution_operation_started_ns",
+        "execution_operation_duration_ns",
+        "server_address",
+        "error_type",
+    }
+)
 LOG_CAPTURE_MAX_SLICES = 3
 LOG_CAPTURE_MAX_RECORDS = 500
 

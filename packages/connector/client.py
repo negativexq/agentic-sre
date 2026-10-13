@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import secrets
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -153,6 +153,16 @@ class ConnectorPrometheusReader:
         return tuple(wire.records_from_wire("traffic", result))
 
 
+class ConnectorAlertRuleReader(ConnectorPrometheusReader):
+    """A Prometheus reader whose connector also serves alert rules (m21 §36.2)."""
+
+    def alert_rule(self, alert: str, labels: Mapping[str, str], at: datetime) -> dict[str, object]:
+        result = self._client.call(
+            "query_alert_rule", {"alert": alert, "labels": dict(labels), "at": at.isoformat()}
+        )
+        return dict(result["rule"])
+
+
 class ConnectorLokiReader:
     def __init__(self, client: ConnectorClient) -> None:
         self._client = client
@@ -175,6 +185,24 @@ class ConnectorLokiReader:
             },
         )
         return wire.records_from_wire("logs", result)
+
+
+class ConnectorExecutionRecordReader(ConnectorLokiReader):
+    """A Loki reader whose connector also serves ExecutionRecords (m21 §36.2)."""
+
+    def execution_records(
+        self, namespace: str, service: str, starts_at: datetime, ends_at: datetime
+    ) -> list[dict[str, str]]:
+        result = self._client.call(
+            "query_execution_records",
+            {
+                "namespace": namespace,
+                "service": service,
+                "starts_at": starts_at.isoformat(),
+                "ends_at": ends_at.isoformat(),
+            },
+        )
+        return [{str(k): str(v) for k, v in entry.items()} for entry in result["entries"]]
 
 
 class ConnectorTempoReader:
@@ -249,11 +277,23 @@ def provider_readers(client: ConnectorClient) -> ProviderReaders:
     capabilities = set(client.capabilities())
     return ProviderReaders(
         prometheus=(
-            ConnectorPrometheusReader(client)
+            (
+                ConnectorAlertRuleReader
+                if "alert_rules" in capabilities
+                else ConnectorPrometheusReader
+            )(client)
             if {"resource_pressure", "traffic"} & capabilities
             else None
         ),
-        loki=ConnectorLokiReader(client) if "logs" in capabilities else None,
+        loki=(
+            (
+                ConnectorExecutionRecordReader
+                if "execution_records" in capabilities
+                else ConnectorLokiReader
+            )(client)
+            if "logs" in capabilities
+            else None
+        ),
         tempo=ConnectorTempoReader(client) if "runtime_traces" in capabilities else None,
     )
 

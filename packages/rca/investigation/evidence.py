@@ -20,6 +20,7 @@ from packages.rca.model import (
     PodStatusObservation,
     ProviderReadFailure,
     ResourcePressure,
+    SymptomCapture,
     TraceSpanObservation,
     TrafficObservation,
 )
@@ -198,6 +199,11 @@ class OverlayObservationSource:
     def trace_read_record(self) -> Sequence[TraceRead] | None:
         # An overlay never changes the base run's trace reads.
         return self.base.trace_read_record()
+
+    def symptom_captures(self) -> Sequence[SymptomCapture]:
+        # m21 §36.2: the run's captures, as the base source froze them
+        method = getattr(self.base, "symptom_captures", None)
+        return method() if method is not None else ()
 
     def alert_episodes(self) -> Sequence[AlertEpisode] | None:
         # Capture history is a property of the alert channel; an overlay never adds to it.

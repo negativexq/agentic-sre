@@ -21,6 +21,7 @@ from packages.rca.model import (
     PodStatusObservation,
     ProviderReadFailure,
     ResourcePressure,
+    SymptomCapture,
     TraceSpanObservation,
     TrafficObservation,
 )
@@ -752,6 +753,11 @@ class InitialObservationView:
     def trace_read_record(self) -> Sequence[TraceRead] | None:
         # The capture's reads are a property of the run, not of the bounded view.
         return self.full_source.trace_read_record()
+
+    def symptom_captures(self) -> Sequence[SymptomCapture]:
+        # m21 §36.2: the run's captures, as the base source froze them
+        method = getattr(self.full_source, "symptom_captures", None)
+        return method() if method is not None else ()
 
     def alert_episodes(self) -> Sequence[AlertEpisode] | None:
         # Capture history is also a property of the channel, not of the bounded view.

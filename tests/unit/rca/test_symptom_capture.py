@@ -84,6 +84,16 @@ def _prometheus(
         if path.endswith("/rules"):
             groups = [{"name": "live", "interval": 5, "rules": rules}]
             return {"status": "success", "data": {"groups": groups}}
+        if path.endswith("/query") and "[" in params["query"][0]:
+            name = params["query"][0].split("{", 1)[0]
+            matrix = [
+                {
+                    "metric": dict(labels, __name__=name),
+                    "values": [[1000.5, "3" if name == "http_requests_total" else "0.01"]],
+                }
+                for labels in selected
+            ]
+            return {"status": "success", "data": {"resultType": "matrix", "result": matrix}}
         if path.endswith("/query"):
             result = [{"metric": labels, "value": [0, "1"]} for labels in selected]
             return {"status": "success", "data": {"resultType": "vector", "result": result}}
@@ -101,12 +111,28 @@ def test_the_alert_rule_its_group_interval_and_the_selected_targets_scrape_inter
         "for_seconds": 15.0,
         "interval_seconds": 5.0,
         "scrape_interval_seconds": 5.0,
+        "counter_series": [
+            {
+                "labels": {"job": "order-service", "instance": "order:8000"},
+                "samples": [[1000.5, 3.0]],
+            }
+        ],
+        "scrape_durations": [
+            {
+                "labels": {"job": "order-service", "instance": "order:8000"},
+                "samples": [[1000.5, 0.01]],
+            }
+        ],
     }
-    query = next(params for path, params in opener.calls if path.endswith("/query"))
-    assert query["query"] == [
-        'group by (job, instance) (http_requests_total{service="order-service",status=~"5.."})'
+    queries = [params for path, params in opener.calls if path.endswith("/query")]
+    assert [q["query"][0] for q in queries] == [
+        'group by (job, instance) (http_requests_total{service="order-service",status=~"5.."})',
+        # m21 §36.6: the counter's samples over (firing - for - R, firing] and its target's scrape durations
+        'http_requests_total{service="order-service",status=~"5.."}[45s]',
+        'scrape_duration_seconds{job="order-service",instance="order:8000"}[45s]',
     ]
-    assert query["time"] == [str(int(FIRED.timestamp()))]
+    # the samples are read at the firing itself, to the millisecond
+    assert [q["time"][0] for q in queries[1:]] == [str(FIRED.timestamp())] * 2
 
 
 def test_an_ambiguous_or_missing_rule_has_no_expression() -> None:

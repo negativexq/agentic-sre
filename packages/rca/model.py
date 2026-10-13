@@ -1083,6 +1083,26 @@ class FrontierAnswer(BaseModel):
     failed_evaluation_at: datetime | None = None
 
 
+class CounterSample(BaseModel):
+    """One stored sample of a series, at the scrape's own timestamp."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    at: datetime
+    value: float
+
+
+class CounterSeries(BaseModel):
+    """m21 §36.6: one series' stored samples; ``labels`` without ``__name__``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    labels: dict[str, str]
+    samples: tuple[CounterSample, ...] = ()
+
+    @property
+    def target(self) -> tuple[str, str]:
+        return self.labels.get("job", ""), self.labels.get("instance", "")
+
+
 class AlertRuleCapture(BaseModel):
     """m21 §36: one firing alert's rule as Prometheus served it, frozen into the run's manifest."""
 
@@ -1097,6 +1117,10 @@ class AlertRuleCapture(BaseModel):
     interval_seconds: float | None = None  # the rule group's evaluation interval
     scrape_interval_seconds: float | None = None  # of the targets the expression selects
     failed: bool = False
+    # m21 §36.6: the counter's samples and its targets' scrape durations over (firing - for - R, firing]; None for
+    # captures taken before them
+    counter_series: tuple[CounterSeries, ...] | None = None
+    scrape_durations: tuple[CounterSeries, ...] | None = None
 
 
 class ExecutionOperation(BaseModel):
@@ -1120,6 +1144,7 @@ class ExecutionTerminal(BaseModel):
     at: datetime
     status: int
     pod_uid: str | None = None
+    path: str | None = None  # m21 §36.6: url.path, the counter's ``route``
 
 
 class ExecutionRecordCapture(BaseModel):
@@ -2047,6 +2072,8 @@ __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
     "AlertRuleCapture",
+    "CounterSample",
+    "CounterSeries",
     "ExecutionOperation",
     "ExecutionRecordCapture",
     "ExecutionTerminal",

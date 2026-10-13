@@ -3951,3 +3951,56 @@ excludes or contradicts a claim. It answers the question for the incident's clai
      every new `RESOLVED` with its leader against the run's cause.
 4. **ITBench-Lite,** as a regression check.
 5. **A `HOLDOUT` not yet seen,** pre-registered separately before it runs, with the hard conditions above.
+
+### 36.6 Condition 6 read from the counter's own samples (owner-approved 2026-10-13; rule v2, engine 2.16.0)
+
+**Measured (`dev25`, `DEV`, unscored).** Both `OrderErrorRateHigh` diagnoses that §36.4 expected to answer stayed
+`OPEN` with `NOT_SUFFICIENT`. Each failed at its first evaluation, the one that made the alert pending:
+
+| Evaluation | `dependency-b`: refused / all `5xx` in §36.3's window | `negative-b` |
+|---|---|---|
+| pending start | 0 / 1 | 0 / 0 |
+| +5 s | 0 / 3 | 9 / 9 |
+| +10 s | 7 / 13 | 14 / 16 |
+| firing | 10 / 16 | 18 / 21 |
+
+The counter's samples show why:
+- The lab scraped `http_requests_total` twice: from the workload and again through the collector. The alert summed
+  both. The collector's series took the first errors one scrape earlier, and it alone made the alert pending.
+- The errors that make an alert pending lie in the last seconds before that evaluation. §36.3's window
+  `[t − R + S, t − S]` leaves out exactly those seconds, so the first evaluation can almost never be met.
+- `dev24`'s estimate (§36.1) counted a wider window than the one §36.3 then fixed, so it overstated what the rule would find.
+
+**Amendment.** The lab's double scrape is removed (testbed design §39). §36.2's alert-rule capture adds, read at
+capture time:
+- every sample of every series the expression's counter selector selects over `(firing − for − R, firing]`;
+- `scrape_duration_seconds` of each target those series come from, over the same interval.
+
+The ExecutionRecord capture adds each terminal record's `url.path`.
+
+Conditions 2 and 6 become:
+- **2 (added).** All selected series come from one scrape target (`job`, `instance`). Their labels are only
+  `service`, `route` and `status` besides those two. Otherwise `FORM_UNSUPPORTED`: a counter read through another
+  exporter is not incremented with each terminal record.
+- **6.** At each evaluation `t` from `firing − for` to the firing, every `G`:
+  - a sample at `s` is **visible** at `t` when `s + d + ε ≤ t`, where `d` is the target's `scrape_duration_seconds`
+    at `s`. A sample without a duration is not visible.
+  - for each series with at least two visible samples in `(t − R, t]` and no decrease between them, with `first`
+    and `last` its first and last visible samples:
+    - count the requests of condition 4 whose terminal status and `url.path` are the series' `status` and `route`;
+    - and whose terminal record lies in `(first + d_first + ε, last − ε]`.
+  - the counted requests over all series, `n`, must satisfy `n / R > T` (or `≥`). Otherwise `NOT_SUFFICIENT`, naming
+    the first evaluation that fails.
+  - `ε` is 0.5 s: the bound on the time between a terminal record and the counter's increment, which the workload
+    makes in the same request completion, one after the other.
+
+**Why this is still a lower bound.**
+- A counted request's increment falls after the first sample was read (`first + d_first`) and no later than the
+  last sample was taken. So it is in that series' raw increase over the samples the evaluation saw.
+- `rate` multiplies that raw increase by a factor of at least 1, and `sum` adds series that are not negative.
+- A series created inside the interval cannot hold a counted request: its first sample is after that request.
+- Samples are taken from Prometheus's own record, so a missed ExecutionRecord can still only lower `n`.
+
+**Unchanged:** every other condition, the answer, its uncertainties, and §3.
+
+**Measurement:** §36.5 again, with 2.15.0 replaced by 2.16.0 and `dev26` for the `DEV` checks.

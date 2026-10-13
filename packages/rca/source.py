@@ -18,6 +18,7 @@ from packages.rca.model import (
     PodStatusObservation,
     ProviderReadFailure,
     ResourcePressure,
+    SymptomCapture,
     TraceSpanObservation,
     TrafficObservation,
 )
@@ -98,6 +99,7 @@ class InMemorySource:
     alert_coverage_start: datetime | None = None
     evidence_coverage: EvidenceCoverage | None = None
     trace_reads: list[TraceRead] | None = None
+    symptom_capture_items: list[SymptomCapture] = field(default_factory=list)
     # Explicit capture history; when absent each alert is one episode that is still firing.
     alert_episode_items: list[AlertEpisode] | None = None
 
@@ -118,6 +120,9 @@ class InMemorySource:
 
     def trace_read_record(self) -> Sequence[TraceRead] | None:
         return self.trace_reads
+
+    def symptom_captures(self) -> Sequence[SymptomCapture]:
+        return self.symptom_capture_items
 
     def alert_episodes(self) -> Sequence[AlertEpisode]:
         if self.alert_episode_items is not None:

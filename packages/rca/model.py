@@ -1079,6 +1079,69 @@ class FrontierAnswer(BaseModel):
     # m21 §26: the API server's last write and the listing that carried it, for an unchanged configuration
     last_written_at: datetime | None = None
     listed_at: datetime | None = None
+    # m21 §36: the first evaluation the refused requests alone did not meet
+    failed_evaluation_at: datetime | None = None
+
+
+class AlertRuleCapture(BaseModel):
+    """m21 §36: one firing alert's rule as Prometheus served it, frozen into the run's manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    evidence_id: str
+    alert: str
+    namespace: str | None = None
+    service: str | None = None  # the alert's own ``service`` label
+    fired_at: datetime
+    expression: str | None = None
+    for_seconds: float | None = None
+    interval_seconds: float | None = None  # the rule group's evaluation interval
+    scrape_interval_seconds: float | None = None  # of the targets the expression selects
+    failed: bool = False
+
+
+class ExecutionOperation(BaseModel):
+    """One finished outgoing call of one request (ExecutionRecord, design note §4.2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    trace_id: str
+    started_at: datetime
+    duration_seconds: float
+    kind: str
+    outcome: str
+    server_address: str | None = None
+    error_type: str | None = None
+
+
+class ExecutionTerminal(BaseModel):
+    """One request's terminal record: its HTTP status, written when it ended."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    trace_id: str
+    at: datetime
+    status: int
+    pod_uid: str | None = None
+
+
+class ExecutionRecordCapture(BaseModel):
+    """m21 §36: a Service's ExecutionRecord over one interval, frozen into the run's manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    evidence_id: str
+    namespace: str
+    service: str
+    starts_at: datetime
+    ends_at: datetime
+    terminals: tuple[ExecutionTerminal, ...] = ()
+    operations: tuple[ExecutionOperation, ...] = ()
+    failed: bool = False
+
+
+class SymptomCapture(BaseModel):
+    """m21 §36: what was captured for one firing alert."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    rule: AlertRuleCapture
+    execution: ExecutionRecordCapture | None = None
 
 
 class RootSupportRecord(BaseModel):
@@ -1983,6 +2046,11 @@ class InvestigationResult(BaseModel):
 __all__ = [
     "CLUSTER_SCOPE",
     "Alert",
+    "AlertRuleCapture",
+    "ExecutionOperation",
+    "ExecutionRecordCapture",
+    "ExecutionTerminal",
+    "SymptomCapture",
     "AlertEpisode",
     "Candidate",
     "CausalFamily",

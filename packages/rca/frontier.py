@@ -362,12 +362,14 @@ def material_frontier(
 UNCHANGED_CONFIGURATION_RULE = "m21.frontier.unchanged-configuration"
 DEPENDENCY_ON_CLAIM_PATH_RULE = "m21.frontier.dependency-on-claim-path"
 DEPENDENCY_DECLARED_UNUSED_RULE = "m21.frontier.dependency-declared-unused"
+DEPENDENCY_REFUSAL_SUFFICIENT_RULE = "m21.frontier.dependency-refusal-sufficient"
 ANSWERED_STATES = frozenset(
     {
         "ANSWERED_ROLE_TRANSFERRED",
         "ANSWERED_NO_CHANGE_IN_WINDOW",
         "ANSWERED_ON_CLAIM_PATH",
         "ANSWERED_DECLARED_UNUSED",
+        "ANSWERED_SYMPTOM_MET_ELSEWHERE",
     }
 )
 # Rules whose open answer names a condition of the evidence, which no read of the investigation changes
@@ -376,6 +378,7 @@ EVIDENCE_RULES = frozenset(
         UNCHANGED_CONFIGURATION_RULE,
         DEPENDENCY_ON_CLAIM_PATH_RULE,
         DEPENDENCY_DECLARED_UNUSED_RULE,
+        DEPENDENCY_REFUSAL_SUFFICIENT_RULE,
     }
 )
 # span kinds that receive a call; every other span of a caller is one it makes (m21 §29.6)

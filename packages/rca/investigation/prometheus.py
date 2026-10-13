@@ -266,6 +266,10 @@ def _list(value: object, description: str) -> list[object]:
 
 # m21 §36.2: the counter selector of an alert expression, whose targets' scrape interval is read
 _COUNTER_SELECTOR = re.compile(r"[a-zA-Z_:][a-zA-Z0-9_:]*\{[^{}]*\}")
+# m21 §36.6: the counter selector with its range, ``C{...}[R]``
+_COUNTER_RANGE = re.compile(
+    r"(?P<selector>[a-zA-Z_:][a-zA-Z0-9_:]*\{[^{}]*\})\s*\[\s*(?P<range>[0-9a-z]+)\s*\]"
+)
 _DURATION_PART = re.compile(r"(\d+)(ms|s|m|h|d)")
 _DURATION_UNITS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
 
@@ -393,12 +397,66 @@ class PrometheusMetricsReader:
         expression = rule.get("query")
         if not isinstance(expression, str):
             raise PrometheusProtocolError("Prometheus alerting rule lacks its query")
+        for_seconds = _finite_float(rule.get("duration", 0), "rule duration")
         return {
             "expression": expression,
-            "for_seconds": _finite_float(rule.get("duration", 0), "rule duration"),
+            "for_seconds": for_seconds,
             "interval_seconds": _finite_float(group.get("interval"), "group interval"),
             "scrape_interval_seconds": self._scrape_interval(expression, at),
+            **self._counter_samples(expression, for_seconds, at),
         }
+
+    def _counter_samples(
+        self, expression: str, for_seconds: float, at: datetime
+    ) -> dict[str, object]:
+        """m21 §36.6: every stored sample of the counter selector's series over ``(at - for - R, at]``, and the
+        scrape durations of their targets; nothing for an expression without a counter range."""
+        found = _COUNTER_RANGE.search(expression)
+        seconds = _duration_seconds(found["range"]) if found else None
+        if found is None or seconds is None:
+            return {}
+        window = f"{math.ceil(for_seconds + seconds)}s"
+        series = self._matrix(f"{found['selector']}[{window}]", at)
+        targets = sorted({(_target_key(labels)) for labels, _ in series})
+        durations = [
+            item
+            for job, instance in targets
+            for item in self._matrix(
+                f'scrape_duration_seconds{{job="{_escape_prometheus_label_value(job)}",'
+                f'instance="{_escape_prometheus_label_value(instance)}"}}[{window}]',
+                at,
+            )
+        ]
+        return {
+            "counter_series": [
+                {"labels": labels, "samples": samples} for labels, samples in series
+            ],
+            "scrape_durations": [
+                {"labels": labels, "samples": samples} for labels, samples in durations
+            ],
+        }
+
+    def _matrix(self, query: str, at: datetime) -> list[tuple[dict[str, str], list[list[float]]]]:
+        data = _success(self._get("query", {"query": query, "time": at.timestamp()}))
+        if data.get("resultType") != "matrix":
+            raise PrometheusProtocolError("Prometheus range selector must return a matrix")
+        result = []
+        for item in _list(data.get("result"), "query result"):
+            series = _mapping(item, "series")
+            labels = {
+                str(key): _label(value, str(key))
+                for key, value in _mapping(series.get("metric"), "series metric").items()
+                if key != "__name__"
+            }
+            samples = [
+                [
+                    _finite_float(_list(value, "sample")[0], "sample timestamp"),
+                    _finite_float(_list(value, "sample")[1], "sample value"),
+                ]
+                for value in _list(series.get("values"), "series values")
+            ]
+            result.append((labels, samples))
+        return sorted(result, key=lambda pair: sorted(pair[0].items()))
 
     def _scrape_interval(self, expression: str, at: datetime) -> float | None:
         selector = _COUNTER_SELECTOR.search(expression)

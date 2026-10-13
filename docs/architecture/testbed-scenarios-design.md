@@ -1982,3 +1982,30 @@ criteria, with new seeds, now with P0 and P1 active through the Connector.
 - **P0:** the Connector's totals per run (requests, joined, Tempo fetches, failures).
 - **P1:** admission waits per capture (total and maximum).
 - **If Tempo is killed,** it is reported and the run continues as §37 did. The next step is decided after the run.
+
+## 39. One scrape path per workload counter (2026-10-13, owner-approved)
+
+**Found** while measuring m21 §36 (`dev25`). Prometheus scraped each workload's own `/metrics` (jobs
+`order-service`, `payment-service`) and also the collector (`otel-collector`). The collector re-exports the same
+instruments, so these families came twice for `order-service` and `payment-service`:
+- `http_requests_total`;
+- `http_request_duration_seconds`;
+- `dependency_request_duration_seconds`;
+- `db_query_duration_seconds`;
+- `db_connection_acquisition_seconds`.
+
+**Effect so far, every run before this change:**
+- **Rate alerts:** `HighErrorRate` (`payment-service`) and `OrderErrorRateHigh` summed two series, so they fired at
+  half their stated threshold. The two copies are also timed differently: the collector exports on its own interval.
+- **Ratio alerts:** the duration means are unaffected, since numerator and denominator double together.
+- **Kafka counters:** these come only through the collector (`order-worker` has no scrape job), so they were never
+  doubled.
+- **Engine:** its traffic reads of `http_requests_total` saw doubled values. This does not affect any ratio it
+  computes.
+
+**Change.** The `otel-collector` job drops these families for the two workloads it also scrapes directly
+(`metric_relabel_configs`). The direct scrape is kept because it is incremented in the request's own completion
+(m21 §36.6).
+
+**Comparability.** Runs before and after differ in when those two alerts fire. Every `HOLDOUT` after this change
+says so, and none is compared with an earlier one on alert timing.

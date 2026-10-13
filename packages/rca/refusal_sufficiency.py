@@ -19,6 +19,7 @@ from packages.rca.model import (
     EntityRef,
     ExecutionOperation,
     ExecutionRecordCapture,
+    ExecutionTerminal,
     FrontierAnswer,
     ObjectVersion,
     StructuralAlternative,
@@ -33,6 +34,10 @@ QUESTION = "IS_THE_DEPENDENCY_AN_UNKNOWN_UPSTREAM_ROLE"
 REQUEST_COUNTER = "http_requests_total"
 # a refused connection, as the workload's instrumentation names it (error.type)
 REFUSALS = frozenset({"ConnectionRefusedError", "ECONNREFUSED"})
+# §36.6: the counter's labels besides its target, and the bound between a terminal record and the counter's increment
+COUNTER_LABELS = frozenset({"job", "instance", "service", "route", "status"})
+MARGIN = timedelta(seconds=0.5)
+RULE_VERSION = "v2"
 
 _FORM = re.compile(
     r"^\s*sum\s*\(\s*rate\s*\(\s*(?P<counter>[a-zA-Z_:][a-zA-Z0-9_:]*)\s*\{(?P<selector>[^{}]*)\}"
@@ -155,6 +160,7 @@ def dependency_refusal_sufficient(
                 affected_claims=alternative.material_for_hypothesis_ids,
                 remaining_uncertainty=("AN_ADDITIONAL_CONTRIBUTION", "THE_PEER_S_OWN_CAUSE"),
                 rule_id=DEPENDENCY_REFUSAL_SUFFICIENT_RULE,
+                rule_version=RULE_VERSION,
             )
         reasons.append((reason, failed_at))
     reason, failed_at = sorted(reasons, key=lambda item: item[0])[0]
@@ -167,6 +173,7 @@ def dependency_refusal_sufficient(
         affected_claims=alternative.material_for_hypothesis_ids,
         remaining_uncertainty=("UPSTREAM_ROLE_UNDETERMINED",),
         rule_id=DEPENDENCY_REFUSAL_SUFFICIENT_RULE,
+        rule_version=RULE_VERSION,
     )
 
 
@@ -189,8 +196,15 @@ def _assess(
     form = recognize(rule.expression)
     if form is None or form.service != rule.service:
         return "FORM_UNSUPPORTED", set(), None
+    if rule.counter_series is None or rule.scrape_durations is None:
+        return "NOT_CAPTURED", set(), None
+    # §36.6: one scrape target, the counter's own labels only
+    if len({series.target for series in rule.counter_series}) > 1 or any(
+        set(series.labels) - COUNTER_LABELS for series in rule.counter_series
+    ):
+        return "FORM_UNSUPPORTED", set(), None
     # 3. known timing
-    if not rule.for_seconds or not rule.interval_seconds or rule.scrape_interval_seconds is None:
+    if not rule.for_seconds or not rule.interval_seconds:
         return "TIMING_UNKNOWN", set(), None
     if execution is None or execution.failed:
         return "NOT_CAPTURED", set(), None
@@ -235,11 +249,34 @@ def _assess(
     counted, refused_elsewhere = _counted(execution, peers, to_dependency, peer_free)
     if refused_elsewhere and not counted:
         return "PEER_USES_IT", set(), None
-    # 6. enough at every evaluation
+    # 6. enough at every evaluation, within the samples that evaluation saw (§36.6)
     range_ = timedelta(seconds=form.range_seconds)
-    scrape = timedelta(seconds=rule.scrape_interval_seconds)
+    durations = {
+        sample.at: sample.value for series in rule.scrape_durations for sample in series.samples
+    }
     for tick in sorted(_ticks(rule.fired_at, rule.for_seconds, rule.interval_seconds)):
-        n = sum(1 for at in counted if tick - range_ + scrape <= at <= tick - scrape)
+        n = 0
+        for series in rule.counter_series:
+            visible = [
+                sample
+                for sample in series.samples
+                if tick - range_ < sample.at <= tick
+                and sample.at in durations
+                and sample.at + timedelta(seconds=durations[sample.at]) + MARGIN <= tick
+            ]
+            if len(visible) < 2 or any(
+                b.value < a.value for a, b in zip(visible, visible[1:], strict=False)
+            ):
+                continue
+            opens = visible[0].at + timedelta(seconds=durations[visible[0].at]) + MARGIN
+            closes = visible[-1].at - MARGIN
+            n += sum(
+                1
+                for terminal in counted
+                if str(terminal.status) == series.labels.get("status")
+                and terminal.path == series.labels.get("route")
+                and opens < terminal.at <= closes
+            )
         if not form.met(n):
             return "NOT_SUFFICIENT", set(), tick
     return None, {rule.evidence_id, execution.evidence_id}, None
@@ -250,12 +287,13 @@ def _counted(
     peers: Mapping[str, EntityRef],
     to_dependency: set[str],
     peer_free: Callable[[EntityRef], bool],
-) -> tuple[list[datetime], bool]:
-    """The terminal times of the requests condition 4 and 5 count, and whether any refusal at a peer was set aside."""
+) -> tuple[list[ExecutionTerminal], bool]:
+    """The terminal records of the requests condition 4 and 5 count, and whether any refusal at a peer was set
+    aside."""
     operations: dict[str, list[ExecutionOperation]] = {}
     for operation in execution.operations:
         operations.setdefault(operation.trace_id, []).append(operation)
-    counted: list[datetime] = []
+    counted: list[ExecutionTerminal] = []
     set_aside = False
     for terminal in execution.terminals:
         if not 500 <= terminal.status <= 599:
@@ -276,7 +314,7 @@ def _counted(
         if not peer_free(peers[last.server_address]):
             set_aside = True
             continue
-        counted.append(terminal.at)
+        counted.append(terminal)
     return counted, set_aside
 
 

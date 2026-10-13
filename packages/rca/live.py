@@ -917,6 +917,7 @@ EXECUTION_RECORD_FIELDS = frozenset(
         "trace_id",
         "k8s_pod_uid",
         "http_response_status_code",
+        "url_path",
         "execution_operation_kind",
         "execution_operation_outcome",
         "execution_operation_started_ns",

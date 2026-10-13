@@ -12,6 +12,8 @@ from datetime import UTC, datetime, timedelta
 from packages.rca.model import (
     Alert,
     AlertRuleCapture,
+    CounterSample,
+    CounterSeries,
     ExecutionOperation,
     ExecutionRecordCapture,
     ExecutionTerminal,
@@ -53,6 +55,7 @@ def execution_capture(
                         at=at,
                         status=int(entry["http_response_status_code"]),
                         pod_uid=entry.get("k8s_pod_uid") or None,
+                        path=entry.get("url_path") or None,
                     )
                 )
         elif record == "operation":
@@ -85,6 +88,22 @@ def _float(value: object) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def _series(value: object) -> tuple[CounterSeries, ...] | None:
+    """m21 §36.6: stored samples as the reader returned them, ``[[epoch seconds, value], ...]`` per series."""
+    if not isinstance(value, list):
+        return None
+    return tuple(
+        CounterSeries(
+            labels={str(k): str(v) for k, v in item["labels"].items()},
+            samples=tuple(
+                CounterSample(at=datetime.fromtimestamp(at, tz=UTC), value=sample)
+                for at, sample in item["samples"]
+            ),
+        )
+        for item in value
+    )
+
+
 def capture_symptom(adapter: ProviderAdapter, alert: Alert) -> SymptomCapture | None:
     """One firing alert's rule and, for a rule of §36's form, its Service's ExecutionRecord from the pending start
     minus the expression's range to the firing. None for an alert that names no Service."""
@@ -112,6 +131,8 @@ def capture_symptom(adapter: ProviderAdapter, alert: Alert) -> SymptomCapture | 
             "for_seconds": _float(found.get("for_seconds")),
             "interval_seconds": _float(found.get("interval_seconds")),
             "scrape_interval_seconds": _float(found.get("scrape_interval_seconds")),
+            "counter_series": _series(found.get("counter_series")),
+            "scrape_durations": _series(found.get("scrape_durations")),
         }
     )
     form = recognize(rule.expression)

@@ -83,7 +83,7 @@ def request(
         )
         for i, (address, outcome, error) in enumerate(operations)
     ]
-    return ExecutionTerminal(trace_id=trace, at=ended, status=status), ops
+    return ExecutionTerminal(trace_id=trace, at=ended, status=status, path="/orders"), ops
 
 
 DB_OK = ("db", "OK", None)
@@ -96,6 +96,33 @@ def refusals(
     """Requests refused at the peer every ``every`` seconds over the minute before the firing."""
     ops = operations or (DB_OK, REFUSED)
     return [request(FIRED - timedelta(seconds=every * k), *ops) for k in range(int(60 / every))]
+
+
+TARGET = {"job": "order", "instance": "order.shop.svc:8000"}
+
+
+def scrapes(offset: float = 2.0, count: int = 13) -> list[datetime]:
+    """Scrape times every 5 s, the last ``offset`` seconds before the firing."""
+    return [FIRED - timedelta(seconds=offset + 5 * k) for k in reversed(range(count))]
+
+
+def counter(
+    times: list[datetime] | None = None, status: str = "503", **labels: str
+) -> dict[str, object]:
+    return {
+        "labels": {**TARGET, "service": "order", "route": "/orders", "status": status, **labels},
+        "samples": [
+            {"at": at, "value": float(i)}
+            for i, at in enumerate(scrapes() if times is None else times)
+        ],
+    }
+
+
+def durations(times: list[datetime] | None = None, seconds: float = 0.01) -> dict[str, object]:
+    return {
+        "labels": TARGET,
+        "samples": [{"at": at, "value": seconds} for at in (scrapes() if times is None else times)],
+    }
 
 
 def capture(
@@ -115,6 +142,8 @@ def capture(
                 "for_seconds": 15.0,
                 "interval_seconds": 5.0,
                 "scrape_interval_seconds": 5.0,
+                "counter_series": [counter()],
+                "scrape_durations": [durations()],
                 **rule,
             }
         ),
@@ -227,7 +256,7 @@ def test_the_recognized_form() -> None:
 
 
 def test_unknown_timing_keeps_the_question_open() -> None:
-    for missing in ("for_seconds", "interval_seconds", "scrape_interval_seconds"):
+    for missing in ("for_seconds", "interval_seconds"):
         assert state(answer(capture(**{missing: None}))) == ("OPEN", "TIMING_UNKNOWN", R), missing
 
 
@@ -249,10 +278,80 @@ def test_an_evaluation_below_the_threshold_leaves_the_question_open() -> None:
     assert state(answer(capture(refusals(every=20.0)))) == ("OPEN", "NOT_SUFFICIENT", R)
 
 
-def test_the_window_excludes_the_last_scrape_interval() -> None:
-    # requests in the 5 s before each evaluation lie after its last scrape and count nowhere they would not
-    edge = [request(FIRED - timedelta(seconds=s), DB_OK, REFUSED) for s in (1, 2, 3, 4)]
-    assert state(answer(capture(edge))) == ("OPEN", "NOT_SUFFICIENT", R)
+def at_seconds(*seconds: float) -> list[tuple[ExecutionTerminal, list[ExecutionOperation]]]:
+    return [request(FIRED - timedelta(seconds=s), DB_OK, REFUSED) for s in seconds]
+
+
+# every evaluation but the firing's is met; the firing's sees one request (24 s before it)
+BASE = (24.0, 27.0, 30.0, 33.0, 36.0, 39.0)
+
+
+def test_only_requests_between_the_visible_samples_count() -> None:
+    found = answer(capture(at_seconds(*BASE)))
+    assert state(found) == ("OPEN", "NOT_SUFFICIENT", R)
+    assert found is not None and found.failed_evaluation_at == FIRED
+    # the last sample before the firing is 2 s before it: a request after it is in no increase yet
+    assert state(answer(capture(at_seconds(*BASE, 0.2, 1.0, 1.6)))) == ("OPEN", "NOT_SUFFICIENT", R)
+    # within MARGIN of that sample: not counted either
+    assert state(answer(capture(at_seconds(*BASE, 2.1, 2.4)))) == ("OPEN", "NOT_SUFFICIENT", R)
+    # just before it: counted, and the firing's evaluation is met
+    assert state(answer(capture(at_seconds(*BASE, 2.6)))) == (ANSWER, None, R)
+
+
+def test_the_pending_evaluation_is_met_by_the_requests_its_samples_saw() -> None:
+    # dev25: the errors that made the alert pending came seconds before that evaluation; §36.3's fixed window
+    # [t - R + S, t - S] left them out, the samples' own interval does not
+    burst = [request(FIRED - timedelta(seconds=15 + s), DB_OK, REFUSED) for s in (2.6, 3.0, 3.5)]
+    steady = [request(FIRED - timedelta(seconds=s), DB_OK, REFUSED) for s in range(3, 15)]
+    found = answer(capture(burst + steady))
+    assert state(found) == (ANSWER, None, R)
+
+
+def test_a_sample_not_yet_stored_at_an_evaluation_is_not_visible() -> None:
+    requests = at_seconds(*BASE, 2.6)
+    assert state(answer(capture(requests))) == (ANSWER, None, R)
+    # a scrape that took 2 s was stored after the evaluation: the last sample it saw is 7 s before the firing
+    slow = durations(seconds=2.0)
+    assert state(answer(capture(requests, scrape_durations=[slow]))) == (
+        "OPEN",
+        "NOT_SUFFICIENT",
+        R,
+    )
+    # without a duration no sample is visible
+    assert state(answer(capture(requests, scrape_durations=[]))) == ("OPEN", "NOT_SUFFICIENT", R)
+
+
+def test_a_counter_read_through_another_target_or_exporter_is_unsupported() -> None:
+    other = counter(job="otel-collector", instance="otel:8889")
+    assert state(answer(capture(counter_series=[counter(), other]))) == (
+        "OPEN",
+        "FORM_UNSUPPORTED",
+        R,
+    )
+    exported = counter(exported_job="order")
+    assert state(answer(capture(counter_series=[exported]))) == ("OPEN", "FORM_UNSUPPORTED", R)
+
+
+def test_a_capture_without_the_samples_is_not_captured() -> None:
+    assert state(answer(capture(counter_series=None))) == ("OPEN", "NOT_CAPTURED", R)
+    assert state(answer(capture(scrape_durations=None))) == ("OPEN", "NOT_CAPTURED", R)
+
+
+def test_a_request_counts_only_in_its_own_series() -> None:
+    assert state(answer(capture(counter_series=[counter(status="500")]))) == (
+        "OPEN",
+        "NOT_SUFFICIENT",
+        R,
+    )
+    other_route = counter()
+    other_route["labels"] = {**other_route["labels"], "route": "/health"}  # type: ignore[dict-item]
+    assert state(answer(capture(counter_series=[other_route]))) == ("OPEN", "NOT_SUFFICIENT", R)
+
+
+def test_a_counter_reset_leaves_its_series_out() -> None:
+    reset = counter()
+    reset["samples"] = [{"at": at, "value": float(i % 4)} for i, at in enumerate(scrapes())]
+    assert state(answer(capture(counter_series=[reset]))) == ("OPEN", "NOT_SUFFICIENT", R)
 
 
 def test_only_a_refusal_at_a_declared_peer_counts() -> None:

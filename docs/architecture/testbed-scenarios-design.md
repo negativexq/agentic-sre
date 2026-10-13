@@ -2092,3 +2092,48 @@ ITBench-Lite.
 - **The run's incidents replayed offline without §36** (`scripts/refusal_sufficiency_recalculation.py`). Every change
   is listed.
 - **`dependency-kafka-delay`'s validity,** after §40.
+
+### 41.1 Results (2026-10-13, engine 2.17.0 at `bd90b5b`, 27 runs from a worktree, scored after the run)
+
+**Hard criteria: all met.**
+
+| Criterion | Result |
+|---|---|
+| Valid runs | 27/27. `dependency-kafka-delay` is valid 3/3 for the first time (§40). |
+| False strong authority | 0 |
+| False `RESOLVED` | 0 |
+| False elimination | 0 |
+| Decoy named | 0 |
+| §36: a counted request touched the dependency before its terminal | None. Every one of the 11 `ANSWERED_SYMPTOM_MET_ELSEWHERE` diagnoses was checked: 19 to 32 candidate requests each, over the capture's records and every stored span of the run. |
+| §36: an answer in a `dependency-kafka-delay` run | None |
+
+**Reported for information only:**
+- **§36 answers.** There are 11 answered diagnoses, all in `config-b` and `negative-b`, all on `kafka`. The §36
+  questions left open, by condition:
+  - `FORM_UNSUPPORTED` 66;
+  - `NOT_CAPTURED` 20;
+  - `NOT_SUFFICIENT` 17.
+- **Offline replay without §36.** 307 diagnoses were replayed:
+  - no change in any diagnosis without captures;
+  - 5 go from `AMBIGUOUS` to `RESOLVED` because of §36 (3 in `config-b`, 2 in `negative-b`);
+  - every one of the 5 leads with `Deployment/payment-service`, which is the run's cause.
+- **Later diagnoses of the same incident** return to `AMBIGUOUS`. This happens in `negative-b` and in one seed of
+  `config-b`:
+  - the §36 answer still holds, and no frontier question is open;
+  - the later windows admit `payment-service` Pods (the rollout's own Pods) as unresolved `MANIFESTATION_ONLY`
+    rivals.
+
+  This gap is separate from §36.
+- **`RESOLVED` per variant,** against §38:
+
+  | Variant | Scored diagnosis (§38 → §41) | All incidents (§38 → §41) |
+  |---|---|---|
+  | `direct-b` | 2/3 → 0/3 | 6/10 → 6/13 |
+  | `config-b` | 0/3 → 1/3 | 0/12 → 1/6 |
+  | `competing-b` | 0/3 → 0/3 | 3/17 → 13/27 |
+  | `dependency-b` | 0/3 → 0/3 | 5/11 → 0/11 |
+  | the others | 0/3 → 0/3 | 0 → 0 |
+
+  The fall in `direct-b` and `dependency-b` is not §36's: the replay without §36 turns no `RESOLVED` into anything
+  else. Engine 2.10.0 to 2.17.0 and §39's alert timing both changed between the two runs, and they have not been
+  separated.

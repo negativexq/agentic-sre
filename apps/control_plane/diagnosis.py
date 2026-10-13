@@ -94,6 +94,7 @@ from packages.storage import (
 from packages.storage.manifest import (
     ManifestRequest,
     build_manifest,
+    earlier_symptom_captures,
     load_manifest_digest,
     load_members,
     load_run_boundary,
@@ -1043,6 +1044,9 @@ class DiagnosisService:
                 # This live cycle is not evidence for the frozen episode: membership is by the
                 # Connector's observation time. A reader outage must not fail the diagnosis.
                 transport_proven_at = self._await_transport(window_end)
+            # m21 §36.8: the captures its earlier runs froze before the resolution
+            with self.session_factory() as session:
+                symptom_captures = earlier_symptom_captures(session, incident_id, window_end)
         else:
             if self.reader is not None:
                 cycle = self.snapshot_result(run_id=run_id)

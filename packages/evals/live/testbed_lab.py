@@ -112,8 +112,8 @@ class RealClock:
 
 
 def database_name(run_id: str) -> str:
-    """A safe PostgreSQL database name for one run."""
-    return re.sub(r"[^a-z0-9_]", "_", f"testbed_{run_id}".lower())[:60]
+    """A safe PostgreSQL database name for one run; also the run's Kubernetes label value, which must end alphanumeric."""
+    return re.sub(r"[^a-z0-9_]", "_", f"testbed_{run_id}".lower())[:60].rstrip("_")
 
 
 _TARGET_SCRIPT = """

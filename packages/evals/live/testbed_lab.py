@@ -150,6 +150,18 @@ except Exception as error:
     ok, detail = False, type(error).__name__
 print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
 """
+# The target probe of a delay on kafka's Pod (m21 §31.5): kafka answers no HTTP, and a delay on every packet of its
+# Pod delays the TCP handshake, so the probe times opening a connection to it from order-service.
+_KAFKA_SCRIPT = """
+import json, socket, time
+started = time.monotonic()
+try:
+    socket.create_connection(("kafka", 9092), timeout=4).close()
+    ok, detail = True, "connected"
+except Exception as error:
+    ok, detail = False, type(error).__name__
+print(json.dumps({"ok": ok, "latency": time.monotonic() - started, "detail": detail}))
+"""
 DELAY_VARIABLE = "FAULT_PAYMENT_DELAY_MS"
 # m21 §13.4: the configuration changes a rollout carries, by fault (variant A delays the handler; variants C fail
 # the calls, or slow them through the database)
@@ -201,13 +213,16 @@ class LabWorld:
         alertmanager_port: int = 19093,
         target_app: str = "payment-service",
         payment_probe: bool = False,
+        kafka_probe: bool = False,
         forwards_file: Path = FORWARDS_FILE,
         ledger_dir: Path = LEDGER_DIR,
     ) -> None:
         self.target_app = (
             target_app  # the workload the fault lands on; its pod is replaced for every run
         )
-        self.target_script = _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
+        self.target_script = (
+            _KAFKA_SCRIPT if kafka_probe else _PAYMENT_SCRIPT if payment_probe else _TARGET_SCRIPT
+        )
         self._rollout: tuple[datetime, str, str, str, str] | None = None
         self._last_delay = ""
         self._env_variable = DELAY_VARIABLE
@@ -1610,8 +1625,8 @@ def world_for(
     if "scheduled-stress-order" in scenario_ids:
         return LabWorld(clock=clock, target_app="order-service")
     if "dependency-delay-kafka" in scenario_ids:
-        # m21 §31.5: kafka answers no HTTP probe; the delay is seen at order-service's publish
-        return LabWorld(clock=clock, target_app="order-service")
+        # m21 §31.5: kafka answers no HTTP probe; its target is the TCP handshake with it
+        return LabWorld(clock=clock, target_app="order-service", kafka_probe=True)
     if {"config-image-payment", "negative-image-decoy"} & set(scenario_ids):
         return LabWorld(clock=clock, payment_probe=True)
     if {"dependency-loss-payment", "competing-loss-podkill"} & set(scenario_ids):

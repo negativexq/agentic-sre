@@ -53,6 +53,7 @@ from packages.rca.model import (
     Resolution,
     ResolutionTrace,
     StructuralAlternative,
+    SymptomCapture,
     Symptoms,
     TimingAssessment,
     TimingStability,
@@ -180,7 +181,7 @@ class Investigator(Protocol):
 # evidence; replay refuses a run recorded under another version (M20.3a).
 # Rule (owner, 2026-10-05; roadmap F1): minor for a change that can alter a diagnosis,
 # patch for one that cannot change any digest, major when the contract version moves.
-RCA_ENGINE_VERSION = "2.14.0"
+RCA_ENGINE_VERSION = "2.15.0"
 
 
 @dataclass(frozen=True)
@@ -583,7 +584,16 @@ def _resolution_trace(case: Case, config: EngineConfig) -> ResolutionTrace:
         causal_onset=case.symptoms.onset,
         latest=case.context.topology.latest,
         trace_reads=case.source.trace_read_record(),
+        symptom_captures=_symptom_captures(case),
     )
+
+
+def _symptom_captures(case: Case) -> tuple[SymptomCapture, ...]:
+    """m21 §36: the captured rules of the case's own alerts; none for a source that captured none."""
+    captures = getattr(case.source, "symptom_captures", None)
+    if captures is None:
+        return ()
+    return tuple(c for c in captures() if c.rule.alert in case.symptoms.alert_names)
 
 
 def _selected_pods(topology: Topology) -> dict[EntityRef, frozenset[EntityRef]]:

@@ -62,6 +62,7 @@ from packages.rca.model import (
     RootSupportStatus,
     RulePreconditionAudit,
     StructuralAlternative,
+    SymptomCapture,
     TraceSpanObservation,
     VerificationTrace,
 )
@@ -840,6 +841,7 @@ def resolve_hypotheses(
     causal_onset: datetime | None = None,
     latest: Mapping[EntityRef, ObjectVersion] | None = None,
     trace_reads: Sequence[TraceRead] | None = None,
+    symptom_captures: Sequence[SymptomCapture] = (),
 ) -> ResolutionTrace:
     """Resolve distinguishability without treating missing proof as contradiction.
 
@@ -1051,6 +1053,33 @@ def resolve_hypotheses(
         (
             found
             if (found := unused.get(a.alternative_id)) is not None
+            and (found.state in ANSWERED_STATES or a.rule_id != DEPENDENCY_ON_CLAIM_PATH_RULE)
+            else a
+        )
+        for a in answers
+    )
+    # m21 §36: a symptom met, at every evaluation, by refusals at a peer that does not use the dependency
+    from packages.rca.refusal_sufficiency import dependency_refusal_sufficient
+
+    # An open answer leaves a partial answer of A as it was, as C's does.
+    sufficient = {
+        a.alternative_id: dependency_refusal_sufficient(
+            by_id[a.alternative_id],
+            symptom_captures,
+            latest or {},
+            selects or {},
+            owned_by or {},
+            trace_spans,
+            trace_reads,
+            causal_onset,
+        )
+        for a in answers
+        if a.state == "OPEN"
+    }
+    answers = tuple(
+        (
+            found
+            if (found := sufficient.get(a.alternative_id)) is not None
             and (found.state in ANSWERED_STATES or a.rule_id != DEPENDENCY_ON_CLAIM_PATH_RULE)
             else a
         )

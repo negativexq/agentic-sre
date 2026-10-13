@@ -1,0 +1,80 @@
+{
+  "incident_id": "incident",
+  "run_id": "run",
+  "claim_id": "peer-claim",
+  "episode_start": "2026-10-13T15:00:00Z",
+  "episode_end": "2026-10-13T15:02:00Z",
+  "frozen_cutoff": "2026-10-13T15:03:00Z",
+  "caller_service": "order",
+  "configured_peer": "payment",
+  "logs": [
+    {
+      "incident_id": "incident",
+      "run_id": "run",
+      "captured_at": "2026-10-13T15:02:30Z",
+      "source_reference": "LOG:1",
+      "record": {
+        "service": "order",
+        "at": "2026-10-13T15:01:10Z",
+        "severity": "ERROR",
+        "message": "dependency failed",
+        "evidence_id": "log:1",
+        "attributes": {
+          "request_id": "req",
+          "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "span_id": "bbbbbbbbbbbbbbbb",
+          "parent_span_id": "cccccccccccccccc",
+          "server.address": "payment",
+          "error.type": "ConnectionRefusedError",
+          "http.request.method": "POST"
+        }
+      }
+    }
+  ],
+  "spans": [
+    {
+      "incident_id": "incident",
+      "run_id": "run",
+      "captured_at": "2026-10-13T15:02:30Z",
+      "source_reference": "TRACE:bbbbbbbbbbbbbbbb",
+      "record": {
+        "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "span_id": "bbbbbbbbbbbbbbbb",
+        "parent_span_id": "cccccccccccccccc",
+        "service": "order",
+        "span_kind": "CLIENT",
+        "start_at": "2026-10-13T15:01:00Z",
+        "end_at": "2026-10-13T15:01:20Z",
+        "status": "ERROR",
+        "evidence_id": "span:bbbbbbbbbbbbbbbb",
+        "semantic_attributes": {
+          "http.request.header.x_request_id": "req",
+          "server.address": "payment",
+          "error.type": "ConnectionRefusedError",
+          "http.request.method": "POST"
+        }
+      }
+    },
+    {
+      "incident_id": "incident",
+      "run_id": "run",
+      "captured_at": "2026-10-13T15:02:30Z",
+      "source_reference": "TRACE:cccccccccccccccc",
+      "record": {
+        "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "span_id": "cccccccccccccccc",
+        "parent_span_id": null,
+        "service": "order",
+        "span_kind": "SERVER",
+        "start_at": "2026-10-13T15:00:50Z",
+        "end_at": "2026-10-13T15:01:30Z",
+        "status": "UNKNOWN",
+        "evidence_id": "span:cccccccccccccccc",
+        "semantic_attributes": {
+          "http.request.header.x_request_id": "req",
+          "http.response.status_code": "500"
+        }
+      }
+    }
+  ]
+}

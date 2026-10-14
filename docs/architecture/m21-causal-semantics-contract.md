@@ -4208,3 +4208,44 @@ unmapped rule deficits and unchanged plain RCA decisions. No DEV, TEST or HOLDOU
 benchmark is run to tune this implementation. Changed acquisition may produce a
 changed diagnosis under existing rules; improved resolution rate is not established
 by these tests. Full rule-precondition-to-query coverage remains future work.
+
+## 41. Atomic precondition acquisition (engine 2.22.0)
+
+[The frozen acquisition contract](precondition-acquisition-contract.md) defines
+DIRECT, PARTIAL and UNMAPPED acquisition separately from decision authority.
+The registry matches the recorded frontier rule **and version**, literal failed
+condition, alternative identity, actor/caller, authorized gap and bounded onset
+window. It performs no telemetry read and does not invent authorized candidates.
+
+The first DIRECT route is `m21.frontier.unchanged-configuration/v1: NO_LISTING`
+to history of the exact configuration actor. It seeks an object listing at or
+before onset. Receiving that listing does not establish write timing, continuity
+or unchanged state; those remain the existing rule's independent conditions.
+Empty history leaves the question open. A listing without write metadata can
+move the rule's deficit from NO_LISTING to NO_WRITE_RECORD while remaining OPEN.
+
+NO_WRITE_RECORD has a PARTIAL history route. The declared-unused rule's
+CALLER_NOT_TRACED, CALLS_NOT_TRACED and TRACE_READ_FAILED reasons have PARTIAL
+caller-scoped trace routes. Samples cannot establish absence or complete trace
+coverage. Unregistered versions, independent coverage, execution proof, recovery
+and unknown reasons remain UNMAPPED. Generic decoder availability is no longer
+reported as an executable witness-precondition route.
+
+Exact DIRECT inputs add specificity ordinal 3 above §40's generic decoder input
+classes. Repeating conditions or adding alternatives cannot increase it. This
+value affects acquisition ordering and intent selection only. Existing
+conservative decision-impact comparison, authorization and budgets remain in
+force. Answered conditions lose the direct-input preference on the next revision.
+
+Research reads and selection audits carry the input contract, source gaps and
+source alternative identities. Final deficits carry acquisition class, required
+observations and matching candidate IDs. Rule classification and current route
+availability are distinct: a DIRECT input can still have no available candidate,
+or execution can be prevented by normal budgets. No planning field enters the
+RCA epistemic digest or grants exclusion/RESOLVED authority.
+
+Constructed tests check exact scope, unrelated actors sharing a rule/reason,
+wrong window/gap/version, unknown onset, duplication, partial metadata, closed
+conditions and real history-tool execution. No benchmark outcomes were consulted
+and no DEV/TEST/HOLDOUT run was used to design this registry. This is a first narrow
+route, not complete rule-to-query coverage or evidence of improved RCA accuracy.

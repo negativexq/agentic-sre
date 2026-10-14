@@ -1,7 +1,7 @@
 """Registered decoder inputs for evidence acquisition, independent of labels.
 
 Specificity is ordinal: unmapped (0), scoped observation (1), structured
-mechanism/relation/discovery inputs (2). It is not predicted confidence,
+mechanism/relation/discovery inputs (2), exact atomic rule inputs (3). It is not predicted confidence,
 resolution probability or the number of hypotheses a query might eliminate.
 """
 
@@ -28,6 +28,7 @@ def candidate_evidence_targets(
     candidate: ObservationCandidate,
     *,
     certificates: Sequence[InvestigationTransitionCertificate] = (),
+    diagnosis: Diagnosis | None = None,
 ) -> tuple[InvestigationEvidenceTarget, ...]:
     """Describe possible observations from an already-authorized exact candidate."""
     grouped: dict[str, InvestigationEvidenceTarget] = {}
@@ -167,15 +168,28 @@ def candidate_evidence_targets(
             required_observations=certificate.preconditions,
             consumer_ids=(certificate.normalizer_rule_id, certificate.transition_rule_id),
         )
+    if diagnosis is not None:
+        from packages.rca.investigation.preconditions import candidate_precondition_targets
+
+        for target in candidate_precondition_targets(candidate, diagnosis):
+            grouped[target.contract_id] = target
     return tuple(grouped[key] for key in sorted(grouped))
 
 
-def evidence_target_specificity(candidate: ObservationCandidate) -> int:
+def evidence_target_specificity(
+    candidate: ObservationCandidate, diagnosis: Diagnosis | None = None
+) -> int:
     """State multiplicity and IDs never contribute to acquisition utility."""
     return max(
         (
-            0 if target.kind == "UNMAPPED" else 1 if target.kind == "OBSERVATION" else 2
-            for target in candidate_evidence_targets(candidate)
+            3
+            if target.acquisition_class == "DIRECT"
+            else 0
+            if target.kind == "UNMAPPED"
+            else 1
+            if target.kind == "OBSERVATION"
+            else 2
+            for target in candidate_evidence_targets(candidate, diagnosis=diagnosis)
         ),
         default=0,
     )
@@ -192,8 +206,14 @@ def recorded_evidence_deficits(
     trace = diagnosis.resolution_trace
     if trace is None:
         return ()
-    targets = {
-        candidate.candidate_id: candidate_evidence_targets(candidate) for candidate in candidates
+    from packages.rca.investigation.preconditions import (
+        candidate_precondition_targets,
+        frontier_input_contract,
+    )
+
+    routed_targets = {
+        candidate.candidate_id: candidate_precondition_targets(candidate, diagnosis)
+        for candidate in candidates
     }
     result: dict[tuple[str, str, str, str], InvestigationEvidenceDeficit] = {}
     for audit in trace.hypothesis_audits:
@@ -213,36 +233,31 @@ def recorded_evidence_deficits(
                     )
             for witness in support.witnesses:
                 for missing in witness.missing:
-                    ids = tuple(
-                        sorted(
-                            candidate.candidate_id
-                            for candidate in candidates
-                            if audit.hypothesis_id in candidate.hypothesis_ids
-                            and any(
-                                target.kind in {"MECHANISM", "RELATION"}
-                                for target in targets[candidate.candidate_id]
-                            )
-                        )
-                    )
                     key = ("WITNESS", audit.hypothesis_id, witness.rule_id, missing)
                     result[key] = InvestigationEvidenceDeficit(
                         source_kind="WITNESS",
                         source_id=audit.hypothesis_id,
                         rule_id=witness.rule_id,
                         missing_precondition=missing,
-                        candidate_ids=ids,
-                        routing="OBSERVATION_ROUTE_ONLY" if ids else "NO_REGISTERED_TOOL_ROUTE",
+                        routing="NO_REGISTERED_TOOL_ROUTE",
                         evidence_ids=witness.evidence_ids,
                     )
     for answer in trace.frontier_answers:
         if answer.state != "OPEN" or not answer.blocked_reason:
             continue
-        ids = tuple(
+        contract = frontier_input_contract(
+            answer.rule_id, answer.blocked_reason, answer.rule_version
+        )
+        bound_ids = tuple(
             sorted(
                 candidate.candidate_id
                 for candidate in candidates
-                if answer.alternative_id in candidate.alternative_ids
-                and any(target.kind != "UNMAPPED" for target in targets[candidate.candidate_id])
+                if any(
+                    target.contract_id
+                    == (f"investigation.precondition.{answer.rule_id}.{answer.blocked_reason}.v1")
+                    and answer.alternative_id in target.source_alternative_ids
+                    for target in routed_targets[candidate.candidate_id]
+                )
             )
         )
         key = ("FRONTIER", answer.alternative_id, answer.rule_id, answer.blocked_reason)
@@ -251,8 +266,16 @@ def recorded_evidence_deficits(
             source_id=answer.alternative_id,
             rule_id=answer.rule_id,
             missing_precondition=answer.blocked_reason,
-            candidate_ids=ids,
-            routing="OBSERVATION_ROUTE_ONLY" if ids else "NO_REGISTERED_TOOL_ROUTE",
+            candidate_ids=bound_ids,
+            routing=(
+                "DIRECT_INPUT_ROUTE"
+                if contract and contract[0] == "DIRECT" and bound_ids
+                else "OBSERVATION_ROUTE_ONLY"
+                if bound_ids
+                else "NO_REGISTERED_TOOL_ROUTE"
+            ),
+            acquisition_class=contract[0] if contract else "UNMAPPED",
+            required_observations=contract[2] if contract else (),
             evidence_ids=answer.evidence_ids,
         )
     return tuple(result[key] for key in sorted(result))

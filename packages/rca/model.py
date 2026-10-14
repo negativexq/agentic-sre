@@ -1904,10 +1904,12 @@ class InvestigationEvidenceTarget(BaseModel):
 
     contract_id: str
     source_gap_ids: tuple[str, ...]
+    source_alternative_ids: tuple[str, ...] = ()
     kind: Literal["DISCOVERY", "MECHANISM", "RELATION", "OBSERVATION", "UNMAPPED"]
     fact_family: str
     required_observations: tuple[str, ...] = ()
     consumer_ids: tuple[str, ...] = ()
+    acquisition_class: Literal["DIRECT", "PARTIAL"] | None = None
     reacquisition_reason: Literal["REQUEST_RELATION_RECONSTRUCTION"] | None = None
     resolution_authority: Literal[False] = False
     no_data_is_exclusion: Literal[False] = False
@@ -1923,7 +1925,9 @@ class InvestigationEvidenceDeficit(BaseModel):
     rule_id: str
     missing_precondition: str
     candidate_ids: tuple[str, ...] = ()
-    routing: Literal["OBSERVATION_ROUTE_ONLY", "NO_REGISTERED_TOOL_ROUTE"]
+    routing: Literal["OBSERVATION_ROUTE_ONLY", "NO_REGISTERED_TOOL_ROUTE", "DIRECT_INPUT_ROUTE"]
+    acquisition_class: Literal["DIRECT", "PARTIAL", "UNMAPPED"] = "UNMAPPED"
+    required_observations: tuple[str, ...] = ()
     evidence_ids: tuple[str, ...] = ()
 
 

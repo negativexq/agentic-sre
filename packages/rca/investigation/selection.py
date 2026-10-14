@@ -320,8 +320,8 @@ def _frontier_coverage(
     )
 
 
-def _discrimination_value(candidate: ObservationCandidate) -> int:
-    return evidence_target_specificity(candidate)
+def _discrimination_value(candidate: ObservationCandidate, diagnosis: Diagnosis) -> int:
+    return evidence_target_specificity(candidate, diagnosis)
 
 
 _NORMALIZED_TRANSITION_PATHS: dict[tuple[str, str], tuple[str, tuple[FindingKind, ...], str]] = {
@@ -654,7 +654,7 @@ def score_observation_candidate(
         discriminating_gap_coverage=len({item.gap_id for item in discriminators}),
         positive_discriminator_states=len(positive_states),
         competing_state_coverage=len(competing_states),
-        discrimination_value=_discrimination_value(candidate),
+        discrimination_value=_discrimination_value(candidate, diagnosis),
         expected_elimination_value=expected_elimination_value,
         expected_decision_impact=_expected_decision_impact_value(
             candidate,
@@ -678,7 +678,7 @@ def score_observation_candidate(
         overlap_class=overlap_class,
         transition_certificates=transition_certificates,
         evidence_targets=candidate_evidence_targets(
-            candidate, certificates=transition_certificates
+            candidate, certificates=transition_certificates, diagnosis=diagnosis
         ),
     )
 

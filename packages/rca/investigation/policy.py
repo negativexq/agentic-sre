@@ -137,6 +137,9 @@ SYSTEM_PROMPT = """You are selecting one bounded read-only observation for a Kub
 
 The deterministic RCA engine owns evidence interpretation, verification, confidence,
 resolution, and root-cause selection. You must not conclude a root cause.
+Your objective is to obtain missing, discriminating evidence, not to obtain RESOLVED.
+Use research_questions to understand the missing fact and recorded possible outcomes.
+Evidence against the current leader is useful. Uncertainty may remain after a useful read.
 
 Choose exactly one allowed information gap and capability, or stop if no useful action
 remains. Select an inspect action only by copying one exact entry from the supplied
@@ -223,6 +226,15 @@ def _brief(context: InvestigationPolicyContext) -> str:
         "structural_alternatives": alternatives,
         "gaps": gaps,
         "candidate_actions": [item.model_dump(mode="json") for item in context.candidate_actions],
+        "research_questions": [
+            item.model_copy(
+                update={
+                    "reads": item.reads[:8],
+                    "possible_outcomes": item.possible_outcomes[:8],
+                }
+            ).model_dump(mode="json")
+            for item in context.research_questions[:8]
+        ],
         "previous_attempts": context.attempted_actions[-8:],
         "last_rejection": (
             {

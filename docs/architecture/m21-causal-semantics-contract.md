@@ -4120,3 +4120,47 @@ unknown/missing traces, strict DTOs, integrity failure and exact SQLite/PostgreS
 Kubernetes DEV capture resolves through one targeted action using existing rules; its strict provider
 replay matches diagnosis digest and observations. This is not a new independent HOLDOUT result, and no
 production control plane or stored HOLDOUT diagnosis was modified.
+
+## 39. Evidence-directed research questions (engine 2.20.0)
+
+Investigation seeks discriminating evidence, not a RESOLVED outcome. The existing
+information gap is the source of each `InvestigationResearchQuestion`: missing fact,
+required relation, entity scope, hypothesis/alternative membership, evidence references
+and recorded rationale are retained. No additional resolution condition, causal role,
+frontier answer, witness or exclusion authority is created by this projection.
+
+Only existing physical candidates with an exact authorized gap/capability/target and
+a recorded discriminator can supply bounded research reads. The query, including log
+references and limits, is preserved. A research read remains subject to the normal
+phase, selection, authorization, provider, per-gap and global budget gates. `AVAILABLE`
+means a locally eligible research option, not guaranteed execution or promised resolution.
+Unavailable tools, already-observed gaps, missing eligible candidates, attempted reads
+and exhausted per-gap budgets have separate research availability states. A missing
+candidate does not establish whether the underlying deficit is telemetry or an absent
+authority rule; that distinction requires recorded evidence, not inference here.
+
+All recorded gap outcomes are retained, including evidence that supports a rival or
+contradicts the leader. NO_DATA and UNKNOWN do not establish exclusion. The planning
+record has literal false values for both exclusion from missing data and resolution
+authority. Existing normalizers, certificates, witnesses and resolver rules remain
+responsible for consequences of actual observations.
+
+The action-policy context includes research questions; its prompt view is capped at
+eight questions with eight reads/outcomes each. The policy is instructed to seek
+missing discriminating evidence and may return useful observations while the diagnosis
+remains AMBIGUOUS. It can still only copy an existing authorized candidate action.
+The deterministic intent selector retains its current ordering and stopping rules.
+
+Every authorized action audit carries the selected research question and exact read.
+Existing audit fields record actual observation outcome, new provenance, findings,
+before/after decision state and progress classification. Final investigation results
+also retain the questions for all currently recorded gaps, including unavailable and
+already-observed ones. These records must be interpreted with the run's stop reason;
+they do not mean the remaining global budget permits another read. Old artifacts
+without the new fields remain readable through defaults, without invented history.
+
+Engine 2.20.0 versions the changed action-policy context/prompt, which can affect future
+LLM acquisition choices. Same-input deterministic selection is checked against a run
+with research metadata disabled. Targeted provider replay also compares research records.
+No claim of improved accuracy, lower AMBIGUOUS count or independent HOLDOUT success is
+made by this change.

@@ -33,6 +33,7 @@ from packages.rca.model import (
     InvestigationLedgerEntry,
     InvestigationObservation,
     InvestigationPolicyKind,
+    InvestigationResearchQuestion,
     InvestigationResult,
     InvestigationStep,
     InvestigationStopReason,
@@ -104,6 +105,7 @@ class InvestigationPolicyContext:
     last_rejection: tuple[str, str, str] | None = None
     structural_alternatives: tuple[StructuralAlternative, ...] = ()
     candidate_actions: tuple[InvestigationAction, ...] = ()
+    research_questions: tuple[InvestigationResearchQuestion, ...] = ()
 
 
 class InvestigationPolicy(Protocol):

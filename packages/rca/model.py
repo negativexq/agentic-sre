@@ -1896,6 +1896,54 @@ class InvestigationTransitionCertificate(BaseModel):
     ordinal_value: int = Field(ge=1, le=4)
 
 
+class InvestigationResearchRead(BaseModel):
+    """An existing bounded candidate, not permission to construct a new query."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    candidate_id: str
+    capability: str
+    target: EntityRef
+    query: InvestigationQuery
+    expected_fact_families: tuple[str, ...] = ()
+    comparison_hypothesis_ids: tuple[str, ...] = ()
+    comparison_alternative_ids: tuple[str, ...] = ()
+
+
+ResearchAvailability = Literal[
+    "AVAILABLE",
+    "UNAVAILABLE_WITH_CURRENT_TOOLS",
+    "ALREADY_OBSERVED",
+    "NO_ELIGIBLE_CANDIDATE",
+    "READS_ALREADY_ATTEMPTED",
+    "GAP_BUDGET_EXHAUSTED",
+]
+
+
+class InvestigationResearchQuestion(BaseModel):
+    """Evidence acquisition plan projected from an existing information gap.
+
+    Availability describes research, never causal truth or a resolution condition.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    gap_id: str
+    dimension: GapDimension
+    missing_fact: str
+    required_relation: str | None = None
+    hypothesis_ids: tuple[str, ...] = ()
+    alternative_ids: tuple[str, ...] = ()
+    entity_scope: tuple[EntityRef, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
+    recorded_rationale: str = ""
+    possible_outcomes: tuple[GapOutcome, ...] = ()
+    reads: tuple[InvestigationResearchRead, ...] = ()
+    availability: ResearchAvailability
+    no_data_is_exclusion: Literal[False] = False
+    resolution_authority: Literal[False] = False
+
+
 class InvestigationActionAudit(BaseModel):
     """Structured lifecycle and decision accounting for one selected action."""
 
@@ -1911,6 +1959,7 @@ class InvestigationActionAudit(BaseModel):
     active_candidate_id: str | None = None
     gap_dimension: GapDimension | None = None
     missing_fact: str | None = None
+    research_question: InvestigationResearchQuestion | None = None
     discriminator: InvestigationDiscriminatorAudit | None = None
     selection_candidates: tuple[InvestigationCandidateSelectionAudit, ...] = ()
     authorization_result: Literal["AUTHORIZED", "REJECTED", "POLICY_STOP"] = "REJECTED"
@@ -2079,6 +2128,7 @@ class InvestigationResult(BaseModel):
     observations: tuple[InvestigationObservation, ...] = ()
     ledger: tuple[InvestigationLedgerEntry, ...] = ()
     action_audits: tuple[InvestigationActionAudit, ...] = ()
+    remaining_research_questions: tuple[InvestigationResearchQuestion, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
     # Present from artifact 1.1; absent in 1.0 artifacts, which stay readable.

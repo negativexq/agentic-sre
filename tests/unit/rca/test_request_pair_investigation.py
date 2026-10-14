@@ -320,6 +320,10 @@ def test_actual_graph_selects_authorized_pair_action_and_replays_it() -> None:
         repeated.diagnosis
     )
     assert result.observations == repeated.observations and replay.next_sequence is None
+    assert tuple(a.research_question for a in result.action_audits) == tuple(
+        a.research_question for a in repeated.action_audits
+    )
+    assert result.remaining_research_questions == repeated.remaining_research_questions
     assert len(reader.calls) == 4
 
 

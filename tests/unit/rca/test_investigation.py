@@ -367,6 +367,11 @@ def test_ambiguous_investigation_adds_evidence_and_resolves_deterministically() 
     assert audit.backend_execution_status.value == "SUCCEEDED"
     assert audit.resolution_before is Resolution.AMBIGUOUS
     assert audit.resolution_after is Resolution.AMBIGUOUS
+    assert audit.research_question is not None
+    assert audit.research_question.missing_fact == gap.missing_fact
+    assert audit.research_question.reads[0].target == right
+    assert audit.research_question.reads[0].query == audit.action.query
+    assert not audit.research_question.resolution_authority
     assert audit.hypothesis_states_before
     assert audit.hypothesis_states_after
     assert audit.hypothesis_states_before != audit.hypothesis_states_after
@@ -408,6 +413,8 @@ def test_investigation_observation_can_reveal_a_temporal_contradiction() -> None
     assert result.diagnosis.root_cause == right
     assert result.diagnosis.resolution_trace is not None
     assert result.diagnosis.resolution_trace.discriminators[0].kind == "VALID_CONTRADICTION"
+    assert result.action_audits[0].research_question is not None
+    assert result.action_audits[0].research_question.reads[0].target == left
 
 
 def test_no_data_is_neutral_and_does_not_resolve() -> None:
@@ -429,6 +436,10 @@ def test_no_data_is_neutral_and_does_not_resolve() -> None:
     assert result.no_data_observations == 1
     assert result.new_evidence_refs == ()
     assert all(item.outcome is GapOutcomeKind.NO_DATA for item in result.observations)
+    assert result.action_audits[0].research_question is not None
+    assert not result.action_audits[0].research_question.no_data_is_exclusion
+    assert result.remaining_research_questions
+    assert all(not item.resolution_authority for item in result.remaining_research_questions)
 
 
 def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() -> None:
@@ -447,6 +458,7 @@ def test_invalid_and_out_of_scope_actions_are_rejected_without_tool_execution() 
         rebuild_case=_rebuild_with_findings,
     )
     assert result.tool_calls == 0
+
     assert result.rejected_actions == 1
     assert result.stop_reason.value == "POLICY_STOP"
     rejected_audit = result.action_audits[0]
@@ -562,6 +574,11 @@ def test_invalid_retry_context_explains_rejection_without_tool_execution() -> No
     assert result.rejected_actions == 1
     assert tool.calls == 1
     assert len(policy.contexts) == 2
+    assert policy.contexts[1].research_questions
+    assert any(
+        question.gap_id == gap.gap_id and question.missing_fact == gap.missing_fact
+        for question in policy.contexts[1].research_questions
+    )
     assert policy.contexts[1].last_rejection is not None
     assert "capability/target pair is not authorized" in policy.contexts[1].last_rejection[0]
 
@@ -616,6 +633,12 @@ def test_unresolvable_gap_skips_policy_and_model() -> None:
     assert result.stop_reason.value == "NO_RESOLVABLE_GAP"
     assert result.model_calls == 0
     assert result.tool_calls == 0
+    assert len(result.remaining_research_questions) == 1
+    question = result.remaining_research_questions[0]
+    assert question.gap_id == resource_gap.gap_id
+    assert question.availability == "UNAVAILABLE_WITH_CURRENT_TOOLS"
+    assert question.recorded_rationale == resource_gap.rationale
+    assert not question.reads
 
 
 def test_duplicate_action_is_blocked_and_loop_terminates() -> None:

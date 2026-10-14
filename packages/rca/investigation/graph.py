@@ -64,6 +64,7 @@ from packages.rca.investigation.normalizers import (
     normalize_observation,
 )
 from packages.rca.investigation.policy import ScriptedInvestigationPolicy
+from packages.rca.investigation.research import research_question, research_questions
 from packages.rca.investigation.selection import (
     ScoredObservationCandidate,
     active_choice_dominates_baseline,
@@ -1183,6 +1184,16 @@ def _select_action(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         last_rejection=state.get("last_rejection"),
         structural_alternatives=diagnosis.structural_alternatives,
         candidate_actions=candidate_actions,
+        research_questions=research_questions(
+            diagnosis,
+            build_observation_candidates(
+                case=case, diagnosis=diagnosis, engine_config=rt.engine_config
+            ),
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=state.get("ledger", ()),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            available_capabilities=tuple(rt.tools),
+        ),
     )
     before = _policy_calls(rt.policy)
     try:
@@ -1719,6 +1730,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     gap = next(
         item for item in state["current_diagnosis"].information_gaps if item.gap_id == action.gap_id
     )
+    assert candidate_match is not None  # Required by the authorization gate above.
     audit = InvestigationActionAudit(
         turn_index=state["turns"],
         action=action,
@@ -1730,6 +1742,7 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         active_candidate_id=state.get("pending_active_candidate_id"),
         gap_dimension=gap.dimension,
         missing_fact=gap.missing_fact,
+        research_question=research_question(gap, (candidate_match[0],)),
         discriminator=discriminator,
         selection_candidates=state.get("pending_selection_candidates", ()),
         authorization_result="AUTHORIZED",
@@ -2386,7 +2399,7 @@ def _investigated_answers(
     return answers
 
 
-def _finalize(state: InvestigationState) -> dict[str, Any]:
+def _finalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     reason = state.get("stop_reason") or InvestigationStopReason.NO_PROGRESS
     diagnosis = state["current_diagnosis"].model_copy(
         update={
@@ -2443,6 +2456,20 @@ def _finalize(state: InvestigationState) -> dict[str, Any]:
         observations=state["observations"],
         ledger=state.get("ledger", ()),
         action_audits=action_audits,
+        remaining_research_questions=research_questions(
+            diagnosis,
+            build_observation_candidates(
+                case=rt.case_for(
+                    state.get("acquired_evidence_refs", ()), state["investigation_findings"]
+                ),
+                diagnosis=diagnosis,
+                engine_config=rt.engine_config,
+            ),
+            attempted_observations=state.get("attempted_observations", ()),
+            previous_investigations=state.get("ledger", ()),
+            max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
+            available_capabilities=tuple(rt.tools),
+        ),
         new_evidence_refs=evidence_refs,
         resolved_during_investigation=(
             state["initial_diagnosis"].resolution is not Resolution.RESOLVED
@@ -2499,7 +2526,7 @@ def build_investigation_graph(
     graph.add_node("normalize_observation", bind(_normalize))
     graph.add_node("rebuild_hypotheses", bind(_rebuild))
     graph.add_node("check_progress", bind(_check_progress))
-    graph.add_node("finalize", _finalize)
+    graph.add_node("finalize", bind(_finalize))
     graph.add_edge(START, "assess")
     graph.add_conditional_edges(
         "assess", _route_after_assess, {"select_action": "select_action", "finalize": "finalize"}

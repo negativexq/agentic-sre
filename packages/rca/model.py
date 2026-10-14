@@ -1865,6 +1865,7 @@ class InvestigationCandidateSelectionAudit(BaseModel):
     alternative_ids: tuple[str, ...] = ()
     discriminators: tuple[InvestigationDiscriminatorAudit, ...] = ()
     transition_certificates: tuple[InvestigationTransitionCertificate, ...] = ()
+    evidence_targets: tuple[InvestigationEvidenceTarget, ...] = ()
     discrimination_value: int = 0
     expected_elimination_value: int = 0
     expected_decision_impact: int = 0
@@ -1896,6 +1897,36 @@ class InvestigationTransitionCertificate(BaseModel):
     ordinal_value: int = Field(ge=1, le=4)
 
 
+class InvestigationEvidenceTarget(BaseModel):
+    """Conditional observation contract; never causal or resolution authority."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    contract_id: str
+    source_gap_ids: tuple[str, ...]
+    kind: Literal["DISCOVERY", "MECHANISM", "RELATION", "OBSERVATION", "UNMAPPED"]
+    fact_family: str
+    required_observations: tuple[str, ...] = ()
+    consumer_ids: tuple[str, ...] = ()
+    reacquisition_reason: Literal["REQUEST_RELATION_RECONSTRUCTION"] | None = None
+    resolution_authority: Literal[False] = False
+    no_data_is_exclusion: Literal[False] = False
+
+
+class InvestigationEvidenceDeficit(BaseModel):
+    """A recorded missing witness/frontier condition, not a new decision blocker."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_kind: Literal["WITNESS", "FRONTIER"]
+    source_id: str
+    rule_id: str
+    missing_precondition: str
+    candidate_ids: tuple[str, ...] = ()
+    routing: Literal["OBSERVATION_ROUTE_ONLY", "NO_REGISTERED_TOOL_ROUTE"]
+    evidence_ids: tuple[str, ...] = ()
+
+
 class InvestigationResearchRead(BaseModel):
     """An existing bounded candidate, not permission to construct a new query."""
 
@@ -1908,6 +1939,7 @@ class InvestigationResearchRead(BaseModel):
     expected_fact_families: tuple[str, ...] = ()
     comparison_hypothesis_ids: tuple[str, ...] = ()
     comparison_alternative_ids: tuple[str, ...] = ()
+    evidence_targets: tuple[InvestigationEvidenceTarget, ...] = ()
 
 
 ResearchAvailability = Literal[
@@ -2129,6 +2161,7 @@ class InvestigationResult(BaseModel):
     ledger: tuple[InvestigationLedgerEntry, ...] = ()
     action_audits: tuple[InvestigationActionAudit, ...] = ()
     remaining_research_questions: tuple[InvestigationResearchQuestion, ...] = ()
+    recorded_evidence_deficits: tuple[InvestigationEvidenceDeficit, ...] = ()
     new_evidence_refs: tuple[str, ...] = ()
     resolved_during_investigation: bool = False
     # Present from artifact 1.1; absent in 1.0 artifacts, which stay readable.

@@ -9,7 +9,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from packages.rca.investigation.candidates import ObservationCandidate
-from packages.rca.investigation.selection import is_observation_candidate_admissible
+from packages.rca.investigation.evidence_targets import candidate_evidence_targets
+from packages.rca.investigation.selection import (
+    is_observation_candidate_admissible,
+    score_observation_candidate,
+)
 from packages.rca.model import (
     Diagnosis,
     GapOutcome,
@@ -31,6 +35,7 @@ def research_question(
     previous_investigations: Sequence[InvestigationLedgerEntry] = (),
     max_tool_calls_per_gap: int | None = None,
     available_capabilities: Sequence[str] | None = None,
+    diagnosis: Diagnosis | None = None,
 ) -> InvestigationResearchQuestion:
     """Retain both supporting and contradicting outcomes without predicting either.
 
@@ -106,6 +111,13 @@ def research_question(
                     capability=candidate.capability,
                     target=candidate.target,
                     query=candidate.query,
+                    evidence_targets=(
+                        score_observation_candidate(
+                            candidate=candidate, diagnosis=diagnosis
+                        ).evidence_targets
+                        if diagnosis
+                        else candidate_evidence_targets(candidate)
+                    ),
                     expected_fact_families=tuple(
                         sorted(
                             {
@@ -169,6 +181,7 @@ def research_questions(
             previous_investigations=previous_investigations,
             max_tool_calls_per_gap=max_tool_calls_per_gap,
             available_capabilities=available_capabilities,
+            diagnosis=diagnosis,
         )
         for gap in sorted(diagnosis.information_gaps, key=lambda item: item.gap_id)
     )

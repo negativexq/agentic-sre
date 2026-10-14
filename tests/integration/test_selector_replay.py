@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session, sessionmaker
 from test_live_diagnosis import T0, setup  # noqa: F401 - pytest fixture
 from test_replay_provider import Readers
@@ -256,6 +256,21 @@ def test_a_recorded_wall_time_stop_is_reproduced_without_the_clock(
 ) -> None:
     _prepare(setup)
     run = _record(setup, DeterministicObservationPolicy)
+
+    # This fixture's first read is source-backed. A synthetic first-turn stop
+    # must also remove later investigation provider reads, preserving capture.
+    assert run.original.action_audits[0].action.capability in {
+        "incident_events",
+        "incident_changes",
+    }
+    with run.factory() as session:
+        session.execute(
+            delete(InvestigationReadRow).where(
+                InvestigationReadRow.run_id == run.run_id,
+                InvestigationReadRow.caller_class == "INVESTIGATION",
+            )
+        )
+        session.commit()
 
     def wall_time_after_first_turn(document: dict[str, Any]) -> None:
         document["action_audits"] = document["action_audits"][:1]

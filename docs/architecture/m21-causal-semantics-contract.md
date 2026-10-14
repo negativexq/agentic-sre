@@ -4164,3 +4164,47 @@ LLM acquisition choices. Same-input deterministic selection is checked against a
 with research metadata disabled. Targeted provider replay also compares research records.
 No claim of improved accuracy, lower AMBIGUOUS count or independent HOLDOUT success is
 made by this change.
+
+## 40. Contracted evidence acquisition (engine 2.21.0)
+
+The acquisition acceptance contract is recorded in
+[evidence-directed-acquisition-contract.md](evidence-directed-acquisition-contract.md).
+It was fixed before implementation without consulting benchmark outcomes. This
+amendment changes acquisition ordering and planning metadata, not resolution,
+root-support, frontier-answer authority or budgets.
+
+Research reads and selection audits now describe registered observation inputs:
+observation family, required inputs, existing consumers and source gaps. Existing
+transition-certificate preconditions are retained verbatim. Decoder requirements
+are not a promise of complete execution/effect/coverage proof. An unmapped input
+remains explicitly UNMAPPED. Discovery remains valid without a transition
+certificate when it has registered bounded unknown slots and observation families.
+
+The legacy `discrimination_value` field now carries ordinal evidence-input
+specificity: unmapped 0, scoped observation 1, structured mechanism/relation/discovery
+2. It is neither measured information gain nor predicted confidence. Cartesian
+support/comparison counts do not affect it. Duplicate discriminators cannot inflate
+physical frontier coverage. An existing hypothesis transition has the same ordinal
+value for a leader and rival; equivalent contracted choices use stable active
+ordering instead of falling back to the legacy leader preference. These are general
+acquisition invariants, not fitted weights or scenario exceptions.
+
+Generic trace repeat risk uses only the already-materialized Case trace index,
+with existing target/window selection. Planning performs no telemetry read. Exact
+log-bound request-pair reconstruction records its distinct purpose; cached raw spans
+do not prove that the requested relation has already been validated. Existing pair
+eligibility, exact authorization, identity, provider-tape and budget gates still apply.
+
+Final results retain recorded witness missing conditions, NOT_FIRED rule reasons
+and blocked frontier reasons. A mapped mechanism/relation observation route is
+reported only as OBSERVATION_ROUTE_ONLY; it does not certify that the missing
+condition will be satisfied. Summary rule reasons without an atomic input mapping
+have NO_REGISTERED_TOOL_ROUTE. No missing-data observation creates exclusion, and
+planning metadata stays outside the RCA epistemic digest.
+
+Constructed tests cover multiplicity, duplicate metadata, discovery without a
+certificate, leader/rival symmetry, visible-cache scope, request-bound reconstruction,
+unmapped rule deficits and unchanged plain RCA decisions. No DEV, TEST or HOLDOUT
+benchmark is run to tune this implementation. Changed acquisition may produce a
+changed diagnosis under existing rules; improved resolution rate is not established
+by these tests. Full rule-precondition-to-query coverage remains future work.

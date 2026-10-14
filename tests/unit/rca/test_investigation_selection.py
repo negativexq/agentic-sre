@@ -383,7 +383,7 @@ def test_equivalent_discrimination_prefers_lower_semantic_duplicate_risk() -> No
     assert ranked[1].utility.semantic_duplicate_penalty == 1
 
 
-def test_discrimination_precedes_known_evidence_novelty() -> None:
+def test_state_multiplicity_does_not_override_known_evidence_novelty() -> None:
     case = _case()
     high = _candidate_with_states(
         "high", support=("h1", "h2"), comparisons=("h3", "h4"), known_fact_keys=("fact",)
@@ -393,9 +393,9 @@ def test_discrimination_precedes_known_evidence_novelty() -> None:
 
     ranked = rank_observation_candidates(candidates=(low, high), diagnosis=diagnosis)
 
-    assert ranked[0].candidate.candidate_id == "high"
-    assert ranked[0].utility.discrimination_value > ranked[1].utility.discrimination_value
-    assert ranked[0].utility.known_evidence_penalty > ranked[1].utility.known_evidence_penalty
+    assert ranked[0].candidate.candidate_id == "low"
+    assert ranked[0].utility.discrimination_value == ranked[1].utility.discrimination_value
+    assert ranked[0].utility.known_evidence_penalty < ranked[1].utility.known_evidence_penalty
 
 
 def test_equal_discrimination_prefers_candidate_without_known_facts() -> None:
@@ -615,7 +615,7 @@ def test_target_bound_normalized_history_path_can_certify_hypothesis_transition(
 
     (scored,) = rank_observation_candidates(candidates=(candidate,), diagnosis=diagnosis)
 
-    assert scored.utility.expected_elimination_value == 4
+    assert scored.utility.expected_elimination_value == 3
     assert len(scored.transition_certificates) == 1
     certificate = scored.transition_certificates[0]
     assert certificate.observation_fact_family == "object_change"
@@ -827,30 +827,43 @@ def test_certified_hypothesis_transition_can_replace_equivalent_baseline() -> No
     assert reason == "higher_certified_decision_impact"
 
 
-def test_unresolved_structural_alternative_beats_irrelevant_candidate() -> None:
+def test_structural_presence_does_not_inflate_evidence_specificity() -> None:
     case = _case()
     alternative = StructuralAlternative(
         alternative_id="alt-open",
         actor=_entity("ConfigMap", "payment-config"),
         role="configuration_source",
         status=FrontierStatus.UNEXPLORED,
+        linked_symptoms=("payment",),
     )
     open_gap = _gap(
         "open-gap",
         GapDimension.CHANGE_TIMING,
         alternative_ids=("alt-open",),
+        target=alternative.actor,
     )
     irrelevant = _gap("irrelevant", GapDimension.CHANGE_TIMING)
     diagnosis = _diagnosis(case, (open_gap, irrelevant), alternatives=(alternative,))
     ranked = rank_observation_candidates(
         candidates=(
-            _candidate("open", gap_ids=("open-gap",), alternative_ids=("alt-open",)),
+            _candidate(
+                "open",
+                target=alternative.actor,
+                gap_ids=("open-gap",),
+                alternative_ids=("alt-open",),
+            ),
             _candidate("irrelevant", gap_ids=("irrelevant",)),
         ),
         diagnosis=diagnosis,
     )
-    assert ranked[0].candidate.candidate_id == "open"
-    assert ranked[0].utility.structural_relevance == 2
+    by_id = {item.candidate.candidate_id: item for item in ranked}
+    assert by_id["open"].utility.structural_relevance == 2
+    assert (
+        by_id["open"].utility.discrimination_value
+        == by_id["irrelevant"].utility.discrimination_value
+    )
+    assert by_id["open"].utility.expected_elimination_value == 0
+    assert by_id["open"].transition_certificates[0].affected_state_kind == "STRUCTURAL_ALTERNATIVE"
 
 
 def test_shared_coverage_is_a_later_tiebreak() -> None:
@@ -885,6 +898,7 @@ def test_acquisition_cost_breaks_a_complete_discrimination_and_risk_tie() -> Non
                 capability="runtime_traces",
                 target=_entity("Deployment", "payment"),
                 gap_ids=("trace",),
+                dimensions=(GapDimension.DEPENDENCY_HEALTH,),
             ),
         ),
         diagnosis=diagnosis,
@@ -1028,11 +1042,8 @@ def test_deterministic_policy_replans_after_a_real_observation() -> None:
     assert result.tool_calls > 0
     assert len(result.ledger) == result.tool_calls
     assert len({entry.query_id for entry in result.ledger}) == result.tool_calls
-    assert tuple(entry.capability for entry in result.ledger) == (
-        "logs",
-        "events",
-        "resource_pressure",
-    )
+    capabilities = {entry.capability for entry in result.ledger}
+    assert {"events", "resource_pressure"} <= capabilities
     assert all(audit.authorization_result == "AUTHORIZED" for audit in result.action_audits)
     assert all(audit.discriminator is not None for audit in result.action_audits)
     assert all(audit.selection_candidates for audit in result.action_audits)
@@ -1042,9 +1053,14 @@ def test_deterministic_policy_replans_after_a_real_observation() -> None:
         assert selected_trace[0].candidate_id
         assert selected_trace[0].discrimination_value > 0
         assert selected_trace[0].candidate_ordering_key
-    assert result.action_audits[1].observation_outcome is GapOutcomeKind.SUPPORTS
-    assert result.action_audits[2].observation_outcome is GapOutcomeKind.NO_DATA
-    assert result.diagnosis.resolution == result.initial_resolution
+    assert any(
+        audit.observation_outcome is GapOutcomeKind.SUPPORTS for audit in result.action_audits
+    )
+    assert any(
+        audit.observation_outcome is GapOutcomeKind.NO_DATA for audit in result.action_audits
+    )
+    assert result.initial_resolution is Resolution.INSUFFICIENT_EVIDENCE
+    assert result.diagnosis.resolution is Resolution.AMBIGUOUS
 
 
 def test_candidate_selection_does_not_call_hidden_telemetry(

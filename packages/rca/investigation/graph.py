@@ -44,6 +44,7 @@ from packages.rca.investigation.evidence import (
     records_from_observation,
     visible_evidence_refs,
 )
+from packages.rca.investigation.evidence_targets import recorded_evidence_deficits
 from packages.rca.investigation.focus import exact_workload_dependency_candidates
 from packages.rca.investigation.intents import (
     SelectedObservationIntent,
@@ -599,7 +600,7 @@ def _conservative_intent_choice(
     baseline: SelectedObservationIntent | None,
     active: SelectedObservationIntent | None,
 ) -> tuple[SelectedObservationIntent | None, str, str]:
-    """Use the active choice only when the same-state utility proves improvement."""
+    """Use active acquisition for a proved improvement or equivalent contracted inputs."""
     if baseline is None and active is None:
         return None, "NO_CANDIDATE", "neither selector found an admissible read"
     if baseline is None:
@@ -1427,6 +1428,7 @@ def _selection_candidate_audit(
                         for discriminator in candidate.discriminators
                     ),
                     transition_certificates=item.transition_certificates,
+                    evidence_targets=item.evidence_targets,
                     discrimination_value=utility.discrimination_value,
                     expected_elimination_value=utility.expected_elimination_value,
                     expected_decision_impact=utility.expected_decision_impact,
@@ -1742,7 +1744,9 @@ def _validate(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         active_candidate_id=state.get("pending_active_candidate_id"),
         gap_dimension=gap.dimension,
         missing_fact=gap.missing_fact,
-        research_question=research_question(gap, (candidate_match[0],)),
+        research_question=research_question(
+            gap, (candidate_match[0],), diagnosis=state["current_diagnosis"]
+        ),
         discriminator=discriminator,
         selection_candidates=state.get("pending_selection_candidates", ()),
         authorization_result="AUTHORIZED",
@@ -2437,6 +2441,11 @@ def _finalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         raise AssertionError(
             "structured executed-action count does not match investigation tool_calls"
         )
+    remaining_candidates = build_observation_candidates(
+        case=rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"]),
+        diagnosis=diagnosis,
+        engine_config=rt.engine_config,
+    )
     result = InvestigationResult(
         diagnosis=diagnosis,
         initial_diagnosis=state["initial_diagnosis"],
@@ -2458,17 +2467,19 @@ def _finalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         action_audits=action_audits,
         remaining_research_questions=research_questions(
             diagnosis,
-            build_observation_candidates(
-                case=rt.case_for(
-                    state.get("acquired_evidence_refs", ()), state["investigation_findings"]
-                ),
-                diagnosis=diagnosis,
-                engine_config=rt.engine_config,
-            ),
+            remaining_candidates,
             attempted_observations=state.get("attempted_observations", ()),
             previous_investigations=state.get("ledger", ()),
             max_tool_calls_per_gap=rt.config.max_tool_calls_per_gap,
             available_capabilities=tuple(rt.tools),
+        ),
+        recorded_evidence_deficits=recorded_evidence_deficits(
+            diagnosis,
+            tuple(
+                candidate
+                for candidate in remaining_candidates
+                if candidate.capability in rt.supported_capabilities
+            ),
         ),
         new_evidence_refs=evidence_refs,
         resolved_during_investigation=(

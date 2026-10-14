@@ -11,6 +11,10 @@ from packages.rca.investigation.candidates import (
     ObservationCandidate,
     build_observation_candidates,
 )
+from packages.rca.investigation.evidence_targets import (
+    candidate_evidence_targets,
+    evidence_target_specificity,
+)
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
@@ -21,6 +25,7 @@ from packages.rca.model import (
     InvestigationAction,
     InvestigationActionAudit,
     InvestigationDiscriminatorKind,
+    InvestigationEvidenceTarget,
     InvestigationExecutionStatus,
     InvestigationLedgerEntry,
     InvestigationPolicyKind,
@@ -74,6 +79,7 @@ class ScoredObservationCandidate:
     utility: ObservationUtility
     overlap_class: str
     transition_certificates: tuple[InvestigationTransitionCertificate, ...] = ()
+    evidence_targets: tuple[InvestigationEvidenceTarget, ...] = ()
 
 
 def observation_relevance_key(scored: ScoredObservationCandidate) -> tuple[int, ...]:
@@ -304,34 +310,18 @@ def _frontier_coverage(
         and audit.action.target is not None
         and audit.gap_dimension is not None
     }
-    return sum(
-        (candidate.capability, candidate.target.canonical, discriminator.dimension.value)
-        not in queried
-        for discriminator in candidate.discriminators
+    return len(
+        {
+            discriminator.dimension.value
+            for discriminator in candidate.discriminators
+            if (candidate.capability, candidate.target.canonical, discriminator.dimension.value)
+            not in queried
+        }
     )
 
 
 def _discrimination_value(candidate: ObservationCandidate) -> int:
-    pairs: set[tuple[str, str]] = set()
-    for discriminator in candidate.discriminators:
-        supports = {
-            f"hypothesis:{identifier}"
-            for outcome in discriminator.support_outcomes
-            for identifier in outcome.hypothesis_ids
-        } | {
-            f"alternative:{identifier}"
-            for outcome in discriminator.support_outcomes
-            for identifier in outcome.alternative_ids
-        }
-        comparisons = {
-            *(f"hypothesis:{identifier}" for identifier in discriminator.comparison_hypothesis_ids),
-            *(
-                f"alternative:{identifier}"
-                for identifier in discriminator.comparison_alternative_ids
-            ),
-        }
-        pairs.update((left, right) for left in supports for right in comparisons if left != right)
-    return len(pairs)
+    return evidence_target_specificity(candidate)
 
 
 _NORMALIZED_TRANSITION_PATHS: dict[tuple[str, str], tuple[str, tuple[FindingKind, ...], str]] = {
@@ -445,11 +435,6 @@ def _transition_certificates(
     """
     hypotheses = {item.hypothesis_id: item for item in _diagnosis_hypotheses(diagnosis)}
     alternatives = {item.alternative_id: item for item in diagnosis.structural_alternatives}
-    leading = (
-        set(diagnosis.resolution_trace.leading_hypothesis_ids)
-        if diagnosis.resolution_trace is not None
-        else set()
-    )
     represented = _represented_findings(diagnosis)
     certificates: dict[tuple[str, str, str], InvestigationTransitionCertificate] = {}
     for discriminator in candidate.discriminators:
@@ -486,7 +471,9 @@ def _transition_certificates(
                 *hypothesis.members,
             ):
                 continue
-            ordinal = 4 if identifier in leading else 3
+            # The same registered observation path has the same value for a
+            # leader and a rival. This is not predicted resolution confidence.
+            ordinal = 3
             certificate = InvestigationTransitionCertificate(
                 source_gap_id=discriminator.gap_id,
                 capability=candidate.capability,
@@ -690,6 +677,9 @@ def score_observation_candidate(
         utility=utility,
         overlap_class=overlap_class,
         transition_certificates=transition_certificates,
+        evidence_targets=candidate_evidence_targets(
+            candidate, certificates=transition_certificates
+        ),
     )
 
 
@@ -697,7 +687,7 @@ def active_choice_dominates_baseline(
     active: ScoredObservationCandidate,
     baseline: ScoredObservationCandidate,
 ) -> tuple[bool, str]:
-    """Prove a narrowly defined active-planner improvement over the M14 choice."""
+    """Accept a better acquisition or a stable tie between contracted inputs."""
     active_utility = active.utility
     baseline_utility = baseline.utility
     impact_at_least_equal = (
@@ -742,6 +732,16 @@ def active_choice_dominates_baseline(
         return True, "equivalent_value_newer_frontier"
     if active_utility.cost_tier < baseline_utility.cost_tier:
         return True, "equivalent_value_lower_acquisition_cost"
+    if (
+        active_utility.expected_decision_impact == baseline_utility.expected_decision_impact
+        and active_utility.frontier_coverage == baseline_utility.frontier_coverage
+        and active_utility.cost_tier == baseline_utility.cost_tier
+        and any(target.kind != "UNMAPPED" for target in active.evidence_targets)
+        and any(target.kind != "UNMAPPED" for target in baseline.evidence_targets)
+    ):
+        # Equivalent contracted inputs use the stable active ordering. Falling
+        # back here would reintroduce the legacy leader preference on a tie.
+        return True, "equivalent_contracted_observation_stable_choice"
     return False, "active_choice_does_not_prove_improvement"
 
 

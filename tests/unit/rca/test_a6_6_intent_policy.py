@@ -413,11 +413,8 @@ def test_deterministic_selector_comparison_is_persisted_in_action_audit() -> Non
 
     audit = result.action_audits[0]
     assert audit.action.capability == "incident_events"
-    assert audit.selection_strategy == "BASELINE_FALLBACK"
-    assert audit.selection_reason in {
-        "active_choice_does_not_prove_improvement",
-        "active_choice_has_lower_expected_decision_impact",
-    }
+    assert audit.selection_strategy == "ACTIVE_DOMINATES_BASELINE"
+    assert audit.selection_reason == "equivalent_contracted_observation_stable_choice"
     assert audit.baseline_candidate_id
     assert audit.active_candidate_id
     assert audit.authorization_result == "AUTHORIZED"

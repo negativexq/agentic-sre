@@ -10,6 +10,7 @@ from hashlib import sha256
 from packages.rca.claims import actor_findings
 from packages.rca.engine import Case, EngineConfig
 from packages.rca.investigation.actions import observation_identity
+from packages.rca.investigation.environment import _select_runtime_trace_context
 from packages.rca.investigation.request_pairs import eligible_logs, pair_provider
 from packages.rca.model import (
     Diagnosis,
@@ -359,6 +360,17 @@ def _visible_known_refs(
             finding_workload = case.topology.workload_of(finding.entity)
             if finding.entity == target or finding_workload == target:
                 refs.update(finding.evidence_ids)
+    elif capability == "runtime_traces" and not query.source_log_ids and case.inputs is not None:
+        # Only the already-materialized Case index is consulted. No source or
+        # provider read is permitted while computing a planning penalty.
+        spans = tuple(case.inputs.trace_index.spans.values())
+        refs.update(
+            span.evidence_id
+            for span in _select_runtime_trace_context(spans, target, query, query.end)
+        )
+        # A request-bound read instead reconstructs a validated log/span
+        # relation; cached constituent rows are not evidence that relation is
+        # already known. Candidate construction separately checks complete pairs.
     return refs
 
 

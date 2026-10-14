@@ -40,6 +40,11 @@ def action_identity(action: InvestigationAction) -> str:
                 "start": query_json["start"],
                 "end": query_json["end"],
                 "limit": query_json["limit"],
+                **(
+                    {"source_log_ids": query_json["source_log_ids"]}
+                    if action.query.source_log_ids
+                    else {}
+                ),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -80,6 +85,8 @@ def observation_identity(
         effective = {"start": query.start, "end": query.end, "limit": query.limit}
     else:
         effective = {"start": query.start, "end": query.end, "limit": query.limit}
+    if query is not None and query.source_log_ids:
+        effective["source_log_ids"] = query.source_log_ids
     encoded = json.dumps(effective, default=str, sort_keys=True, separators=(",", ":"))
     return f"{capability}|{target.canonical}|{encoded}"
 
@@ -124,6 +131,13 @@ def validate_action(
             )
         if action.query.limit > 32:
             return ActionValidation(False, "runtime_traces limit must be at most 32")
+    if action.query is not None and action.query.source_log_ids:
+        if action.capability != "runtime_traces" or action.query.limit < 2:
+            return ActionValidation(
+                False, "source log IDs require a bounded runtime-trace pair read"
+            )
+        if len(set(action.query.source_log_ids)) != len(action.query.source_log_ids):
+            return ActionValidation(False, "source log IDs must be unique")
     gap = next((item for item in gaps if item.gap_id == action.gap_id), None)
     if gap is None:
         return ActionValidation(False, f"unknown information gap {action.gap_id!r}")

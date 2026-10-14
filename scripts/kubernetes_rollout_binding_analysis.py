@@ -31,10 +31,10 @@ from packages.rca.source import InMemorySource
 from scripts.rollout_resolution_dev_proof import evaluate_source
 
 
-def analyze(capture: Path, output: Path) -> dict[str, Any]:
-    if output.exists():
-        raise ValueError("Fresh output directory required")
-    output.mkdir(parents=True)
+def load_capture_source(
+    capture: Path,
+) -> tuple[InMemorySource, FrozenRequestEvidence, dict[str, Any], datetime]:
+    """Validate frozen lifecycle provenance and the declared driver symptom channel."""
     evidence = FrozenRequestEvidence.model_validate_json(
         (capture / "remote-evidence.json").read_text()
     )
@@ -84,7 +84,6 @@ def analyze(capture: Path, output: Path) -> dict[str, Any]:
     onset = datetime.fromisoformat(next(r["end"] for r in ledger if r["status"] >= 500))
     injection = datetime.fromisoformat(timeline["injection"])
     spans = [s.record for s in evidence.spans]
-    baseline = [s for s in spans if s.start_at < injection]
     logs = [
         r.record
         for r in evidence.logs
@@ -112,6 +111,18 @@ def analyze(capture: Path, output: Path) -> dict[str, Any]:
         cutoff=evidence.episode_end,
         alert_coverage_start=evidence.episode_start,
     )
+    return source, evidence, protocol, injection
+
+
+def analyze(capture: Path, output: Path) -> dict[str, Any]:
+    if output.exists():
+        raise ValueError("Fresh output directory required")
+    output.mkdir(parents=True)
+    source, evidence, protocol, injection = load_capture_source(capture)
+    spans = list(source.trace_items)
+    baseline = [s for s in spans if s.start_at < injection]
+    logs = source.error_items
+    onset = source.alert_items[0].starts_at
     probe = DevelopmentTransportProbe("http://unused-loki", "http://127.0.0.1:13200")
     batch = probe.kubernetes_traces(
         protocol["namespace"], evidence.caller_service, onset, evidence.episode_end

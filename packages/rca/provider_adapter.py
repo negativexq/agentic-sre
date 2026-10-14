@@ -25,10 +25,17 @@ from packages.rca.model import (
     TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.trace_request_pairs import RequestPairBatch
 
 ProviderCallerClass = Literal["CAPTURE", "ENGINE", "INVESTIGATION"]
 # Every capability name `ProviderAdapter.supports` can report, in canonical order.
-PROVIDER_CAPABILITIES = ("logs", "resource_pressure", "runtime_traces", "traffic")
+PROVIDER_CAPABILITIES = (
+    "logs",
+    "resource_pressure",
+    "runtime_trace_pairs",
+    "runtime_traces",
+    "traffic",
+)
 _T = TypeVar("_T")
 
 
@@ -80,6 +87,44 @@ class TempoReader(Protocol):
     def query(
         self, target: EntityRef, query: InvestigationQuery
     ) -> tuple[TraceSpanObservation, ...] | TempoTraceBatch: ...
+
+
+class TempoPairReader(Protocol):
+    def query_pairs(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        logs: Sequence[LogRecord],
+        existing: Sequence[TraceSpanObservation],
+    ) -> RequestPairBatch: ...
+
+
+def request_pair_descriptor(
+    target: EntityRef,
+    query: InvestigationQuery,
+    logs: Sequence[LogRecord],
+    existing: Sequence[TraceSpanObservation],
+) -> dict[str, Any]:
+    tids = {r.attributes.get("trace_id") for r in logs}
+    cached = sorted(
+        (r for r in existing if r.trace_id in tids),
+        key=lambda r: (r.trace_id, r.span_id, r.evidence_id),
+    )
+    return {
+        "provider": "tempo",
+        "operation": "log_request_pairs.v1",
+        "target": target.model_dump(mode="json"),
+        "query": query.model_dump(mode="json"),
+        "source_log_ids": [r.evidence_id for r in logs],
+        "source_records_sha256": sha256(
+            json.dumps(_json_value(logs), sort_keys=True).encode()
+        ).hexdigest(),
+        "existing_spans_sha256": sha256(
+            json.dumps(_json_value(cached), sort_keys=True).encode()
+        ).hexdigest(),
+        "max_trace_fetches": 8,
+        "max_retained_spans": query.limit,
+    }
 
 
 @dataclass(frozen=True)
@@ -298,6 +343,19 @@ class ProviderBoundary(Protocol):
     ) -> list[LogRecord] | ProviderReadFailure: ...
 
 
+class RequestPairProviderBoundary(ProviderBoundary, Protocol):
+    def query_tempo_pairs(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        logs: Sequence[LogRecord],
+        existing: Sequence[TraceSpanObservation],
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> RequestPairBatch | ProviderReadFailure: ...
+
+
 @dataclass(frozen=True)
 class ProviderAdapter:
     """Pass-through provider boundary with run and caller identity."""
@@ -326,6 +384,8 @@ class ProviderAdapter:
     def supports(self, capability: str) -> bool:
         if capability in {"resource_pressure", "traffic"}:
             return self.readers.prometheus is not None
+        if capability == "runtime_trace_pairs":
+            return callable(getattr(self.readers.tempo, "query_pairs", None))
         if capability == "runtime_traces":
             return self.readers.tempo is not None
         if capability == "logs":
@@ -414,6 +474,35 @@ class ProviderAdapter:
                 query_key=query_key,
                 descriptor=descriptor,
                 call=lambda: reader.query(target, query),
+            ),
+        )
+
+    def query_tempo_pairs(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        logs: Sequence[LogRecord],
+        existing: Sequence[TraceSpanObservation],
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> RequestPairBatch | ProviderReadFailure:
+        if not self.supports("runtime_trace_pairs"):
+            raise RuntimeError("Tempo exact-pair reader is not configured")
+        descriptor = request_pair_descriptor(target, query, logs, existing)
+        return cast(
+            RequestPairBatch | ProviderReadFailure,
+            self._provider_call(
+                capability="tempo_request_pairs",
+                descriptor=descriptor,
+                query_key=provider_query_key(
+                    descriptor,
+                    descriptor_id=descriptor_id,
+                    observation_identity=observation_identity,
+                ),
+                call=lambda: cast(TempoPairReader, self.readers.tempo).query_pairs(
+                    target, query, logs, existing
+                ),
             ),
         )
 

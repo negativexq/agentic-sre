@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from packages.rca.investigation.intents import IntentMenuItem
 from packages.rca.investigation.state import InvestigationPolicyContext
@@ -44,6 +44,12 @@ class InvestigationQueryWire(BaseModel):
     reasons: list[str]
     contains: list[str]
     limit: int = Field(ge=1, le=64)
+    source_log_ids: list[str] | None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_wire_shape(cls, value: Any) -> Any:
+        return {"source_log_ids": None, **value} if isinstance(value, dict) else value
 
 
 class InvestigationActionWire(BaseModel):
@@ -75,6 +81,7 @@ class InvestigationActionWire(BaseModel):
                 reasons=tuple(self.query.reasons),
                 contains=tuple(self.query.contains),
                 limit=self.query.limit,
+                source_log_ids=tuple(self.query.source_log_ids or ()),
             )
             if self.query is not None
             else None

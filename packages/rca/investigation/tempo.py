@@ -21,9 +21,15 @@ from urllib.request import Request, urlopen
 from packages.rca.model import (
     EntityRef,
     InvestigationQuery,
+    LogRecord,
     TraceSpanLink,
     TraceSpanObservation,
     TraceSpanStatus,
+)
+from packages.rca.trace_request_pairs import (
+    RequestPairBatch,
+    RequestPairTraceMissing,
+    read_request_pairs,
 )
 from packages.rca.traces import SEMANTIC_ATTRIBUTE_ALLOWLIST
 
@@ -206,6 +212,8 @@ def _validate_query(query: InvestigationQuery) -> tuple[int, int]:
         raise ValueError("Tempo query end must not precede start")
     if query.limit > 32:
         raise ValueError("runtime_traces limit must be at most 32")
+    if query.source_log_ids:
+        raise ValueError("Source log IDs require the exact-pair reader")
     if query.reasons or query.contains:
         raise ValueError("runtime_traces does not accept reasons/contains filters")
     return start, end
@@ -707,6 +715,24 @@ class TempoTraceReader:
             end,
         )
         return self.flights.fetch(key, get)
+
+    def query_pairs(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        logs: Sequence[LogRecord],
+        existing: Sequence[TraceSpanObservation],
+    ) -> RequestPairBatch:
+        def fetch(trace_id: str) -> tuple[TraceSpanObservation, ...]:
+            assert query.start is not None and query.end is not None
+            payload = self._fetch_trace(
+                trace_id, _epoch_seconds(query.start), _epoch_seconds(query.end)
+            )
+            if payload is None:
+                raise RequestPairTraceMissing("Exact log trace is unavailable")
+            return parse_tempo_trace_json(payload)
+
+        return read_request_pairs(target, query, logs, existing, fetch)
 
     def query(self, target: EntityRef, query: InvestigationQuery) -> TempoTraceBatch:
         (result,) = self.query_many((target,), query)

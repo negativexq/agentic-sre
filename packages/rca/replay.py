@@ -56,6 +56,7 @@ from packages.rca.provider_adapter import (
     tempo_descriptor,
     traffic_descriptor,
 )
+from packages.rca.trace_request_pairs import RequestPairBatch
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -267,6 +268,27 @@ class ReplayProviderAdapter:
             descriptor_id,
             observation_identity,
             _decode_tempo,
+        )
+
+    def query_tempo_pairs(
+        self,
+        target: EntityRef,
+        query: InvestigationQuery,
+        logs: Sequence[LogRecord],
+        existing: Sequence[TraceSpanObservation],
+        *,
+        descriptor_id: str | None = None,
+        observation_identity: str | None = None,
+    ) -> RequestPairBatch | ProviderReadFailure:
+        from packages.rca.provider_adapter import request_pair_descriptor
+
+        return self._replay(
+            "runtime_trace_pairs",
+            "tempo_request_pairs",
+            request_pair_descriptor(target, query, logs, existing),
+            descriptor_id,
+            observation_identity,
+            RequestPairBatch.model_validate,
         )
 
     def query_loki(

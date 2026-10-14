@@ -4074,3 +4074,49 @@ is still subject to the existing version gate.
 retention of independent Pod failure evidence, and the existing runtime trace Pod attribution.
 These are development checks, not a new independent HOLDOUT or proof that the affected final incidents
 now resolve. Any later rollout-to-Service-error explanation needs its own evidence contract and validation.
+
+## 38. Exact request-pair acquisition from recorded dependency logs (2026-10-14; engine 2.19.0)
+
+**Purpose.** A bounded general trace search may establish a mechanism but leave individual dependency
+log operations unbound. Investigation can now request the exact client/parent pair named by already-visible
+log evidence. This is a read capability, not a new explanation, exclusion, mechanism or resolution rule.
+
+**Authorization.** The existing `runtime_traces` action accepts optional `source_log_ids` (one to eight
+unique evidence references). The policy supplies no trace IDs or native query. References must resolve to
+visible incident/revision logs for the authorized caller/window. A dependency-health gap can authorize a
+caller workload only from its recorded `DEPENDENCY_ERRORS` finding, declared peer and cited correlated
+log. The caller query discriminates that existing dependency claim; it does not assert that the caller
+initiated the failure. The existing exact-candidate, gap and query gates remain in force.
+
+**Observation.** An explicitly configured provider advertises frozen `runtime_trace_pairs` support.
+The tool reuses valid cached pairs and fetches only missing trace IDs, at most eight per tool call and
+at most 32 retained spans. Client and parent must be unique and direct, share the log's trace/request and
+caller, match the exact Kubernetes namespace/workload target, carry matching peer/method/failure type,
+and have a failed client and parent 5xx with nested timestamps inside the clipped frozen query window.
+Only validated pairs enter the evidence overlay. A pair is never split to fit the cap. Missing IDs,
+404, read failures, mismatched identity/scope or exhausted pair budget leave explicit UNKNOWN assessments.
+No missing trace or missing server response proves dependency health, recovery or causal exclusion.
+False provider corroboration is an integrity error before admission.
+
+**Tape and replay.** The `tempo_request_pairs` read records target, effective query, ordered source-log
+references, source-record digest, relevant existing-span digest and limits. The structured result records
+per-log state/deficits/retrieval and fetch counts. Replay requires matching frozen support and the exact
+next descriptor; changed source or cache content diverges without advancing the tape. Replayed results
+pass the same pair validation before admission. The default two-calls-per-gap and total-call limits do
+not change. Multiple DEV helper batches are not a free production action.
+
+**Authority and coverage.** Existing typed trace normalization and witness rules interpret admitted raw
+spans. The DEV all-log accounting guard remains unregistered. Completing all log members is not a fifth
+RESOLVED condition. Each observation reports selected versus unselected visible eligible logs; symptom
+measurement accounting remains UNASSESSED. A resolved investigation is not forced to keep fetching logs
+solely to complete an explanatory population. Deployment/Pod UID authority remains with existing
+mechanism rules, not with these log identities or the target's name.
+
+**Versioning and validation.** Engine 2.19.0 versions changed investigation authorization/candidate/read
+semantics. Empty `source_log_ids` is omitted from serialized legacy queries; old frozen capabilities do
+not advertise the new mode. The existing engine-version replay gate remains unchanged. Tests cover
+active graph admission/resolution, partial budgets, source/window/namespace/request mismatch, cache reuse,
+unknown/missing traces, strict DTOs, integrity failure and exact SQLite/PostgreSQL tape replay. The stored
+Kubernetes DEV capture resolves through one targeted action using existing rules; its strict provider
+replay matches diagnosis digest and observations. This is not a new independent HOLDOUT result, and no
+production control plane or stored HOLDOUT diagnosis was modified.

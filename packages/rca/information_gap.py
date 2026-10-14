@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 
 from packages.rca.causal_roles import HypothesisCausalRole, HypothesisCausalRoles
-from packages.rca.claims import admitted
+from packages.rca.claims import actor_findings, admitted
 from packages.rca.mechanism_bridge import RuntimeMechanismBridges
 from packages.rca.model import (
     AuthorizedQuery,
@@ -40,6 +40,7 @@ from packages.rca.runtime_propagation import RuntimePropagation
 from packages.rca.signals import ACCESS_KINDS
 from packages.rca.source import ObservationSource
 from packages.rca.topology import WORKLOAD_KINDS, Topology
+from packages.rca.trace_request_pairs import valid_identity
 
 CAPABILITIES: tuple[ToolCapability, ...] = (
     ToolCapability(
@@ -1063,6 +1064,61 @@ def _derive_runtime_aware_gaps(
                     rationale=f"open {alternative.role} mechanism may change initiating cause; actor-local evidence required",
                 )
             )
+    if (
+        source is not None
+        and runtime_context.topology is not None
+        and _typed_runtime_provider_available(source, "runtime_trace_pairs")
+    ):
+        topology = runtime_context.topology
+        by_id = {h.hypothesis_id: h for h in hypotheses}
+        visible = {log.evidence_id: log for log in source.error_logs()}
+        expanded = []
+        for need in needs:
+            pair_queries = list(need.authorized_queries)
+            if need.dimension is GapDimension.DEPENDENCY_HEALTH:
+                for hid in need.hypothesis_ids:
+                    hypothesis = by_id.get(hid)
+                    if hypothesis is None:
+                        continue
+                    for finding in actor_findings(hypothesis):
+                        if finding.kind is not FindingKind.DEPENDENCY_ERRORS:
+                            continue
+                        caller = next(
+                            (
+                                r
+                                for r in topology.latest
+                                if r.canonical == finding.details.get("caller")
+                            ),
+                            None,
+                        )
+                        if (
+                            caller is None
+                            or caller.kind not in WORKLOAD_KINDS
+                            or caller.namespace != finding.entity.namespace
+                        ):
+                            continue
+                        matched = any(
+                            ref in visible
+                            and visible[ref].service in topology.service_names(caller)
+                            and visible[ref].attributes.get("server.address") == finding.entity.name
+                            and valid_identity(visible[ref].attributes.get("trace_id"), 32)
+                            and valid_identity(visible[ref].attributes.get("span_id"), 16)
+                            and valid_identity(visible[ref].attributes.get("parent_span_id"), 16)
+                            for ref in finding.evidence_ids
+                        )
+                        if matched:
+                            query = _query("runtime_traces", caller)
+                            if query is not None and query not in pair_queries:
+                                pair_queries.append(query)
+            expanded.append(
+                replace(
+                    need,
+                    authorized_queries=tuple(
+                        sorted(pair_queries, key=lambda q: (q.capability, q.target.canonical))
+                    ),
+                )
+            )
+        needs = expanded
     unique: dict[tuple[object, ...], _InformationNeed] = {}
     for need in needs:
         key = (

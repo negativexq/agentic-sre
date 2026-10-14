@@ -10,6 +10,7 @@ from typing import Any
 
 from packages.rca.engine import Case
 from packages.rca.information_gap import CAPABILITIES
+from packages.rca.investigation.actions import observation_identity
 from packages.rca.investigation.environment import (
     InvestigationBackend,
     LokiInvestigationBackend,
@@ -18,8 +19,13 @@ from packages.rca.investigation.environment import (
     _query_trace_observations,
 )
 from packages.rca.investigation.prometheus import _traffic_query_step_seconds
+from packages.rca.investigation.request_pairs import eligible_logs, pair_provider
 from packages.rca.investigation.state import InvestigationTool
-from packages.rca.investigation.tempo import TempoSearchDiagnostics, TempoTraceBatch
+from packages.rca.investigation.tempo import (
+    TempoSearchCompleteness,
+    TempoSearchDiagnostics,
+    TempoTraceBatch,
+)
 from packages.rca.model import (
     EntityRef,
     GapOutcomeKind,
@@ -32,8 +38,10 @@ from packages.rca.model import (
     RuntimeObservationContext,
     RuntimeObservationState,
     RuntimeQueryDescriptor,
+    TraceSpanObservation,
     TrafficObservation,
 )
+from packages.rca.provider_adapter import ProviderIntegrityError
 from packages.rca.runtime_evidence import (
     RuntimeOutcomeState,
     classify_runtime_span_outcome,
@@ -317,7 +325,10 @@ def _tempo_runtime_context(
             "effective_start": requested.start.isoformat(),
             "effective_end": effective_end.isoformat(),
             "limit": min(requested.limit, 32),
-            "template": "tempo.target_traceql.v1",
+            "template": "tempo.log_request_pairs.v1"
+            if requested.source_log_ids
+            else "tempo.target_traceql.v1",
+            **({"source_log_ids": requested.source_log_ids} if requested.source_log_ids else {}),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -359,7 +370,9 @@ def _tempo_runtime_context(
         state=state,
         query=RuntimeQueryDescriptor(
             descriptor_id=f"sha256:{sha256(descriptor_material.encode()).hexdigest()}",
-            template_id="tempo.target_traceql.v1",
+            template_id="tempo.log_request_pairs.v1"
+            if requested.source_log_ids
+            else "tempo.target_traceql.v1",
             target=target,
             requested_start=requested.start,
             requested_end=requested.end,
@@ -874,6 +887,8 @@ class RuntimeTracesTool(_BaseTool):
         self, case: Case, gap: InformationGap, target: EntityRef, query: InvestigationQuery | None
     ) -> InvestigationObservation:
         requested = _default_query(query, onset=case.symptoms.reference_time)
+        if requested.source_log_ids:
+            return self._request_pairs(case, gap, target, requested)
         if self.backend is None:
             spans = _query_trace_observations(
                 case.source.trace_observations(),
@@ -944,6 +959,118 @@ class RuntimeTracesTool(_BaseTool):
             refs=refs,
             observed_at=max((span.start_at for span in spans), default=None),
             runtime=runtime,
+        )
+
+    def _request_pairs(
+        self, case: Case, gap: InformationGap, target: EntityRef, requested: InvestigationQuery
+    ) -> InvestigationObservation:
+        provider = pair_provider(self.backend)
+        if provider is None:
+            raise ValueError("Exact request-pair provider is not configured")
+        by_id = {
+            log.evidence_id: log
+            for log in eligible_logs(case, target, requested, missing_only=False, gap=gap)
+        }
+        if len(set(requested.source_log_ids)) != len(requested.source_log_ids) or any(
+            ref not in by_id for ref in requested.source_log_ids
+        ):
+            raise ValueError(
+                "Request-pair source logs are not visible and authorized for this target/window"
+            )
+        logs = tuple(by_id[ref] for ref in requested.source_log_ids)
+        cutoff = case.source.observation_cutoff()
+        effective = (
+            requested.model_copy(update={"end": min(requested.end, cutoff)})
+            if requested.end is not None and cutoff is not None
+            else requested
+        )
+        result = provider.query_tempo_pairs(
+            target,
+            effective,
+            logs,
+            case.source.trace_observations(),
+            observation_identity=observation_identity(self.name, target, requested),
+        )
+        if isinstance(result, ProviderReadFailure):
+            return make_observation(
+                gap=gap,
+                capability=self.name,
+                target=target,
+                payload={"traces": []},
+                source_class="provider_error",
+                error=f"{result.error_type}: {result.error_message}",
+                outcome=GapOutcomeKind.NO_DATA,
+            )
+        # Revalidate replay/reader results before any raw evidence enters the overlay.
+        from packages.rca.trace_request_pairs import pair_deficits
+
+        if tuple(a.source_log_id for a in result.assessments) != requested.source_log_ids:
+            raise ProviderIntegrityError(
+                "Request-pair assessment membership differs from source logs"
+            )
+        admitted: dict[str, TraceSpanObservation] = {}
+        for log, assessment in zip(logs, result.assessments, strict=True):
+            if assessment.state == "CORROBORATED":
+                if pair_deficits(log, result.spans, target, effective):
+                    raise ProviderIntegrityError(
+                        "Request-pair result claims corroboration without a valid pair"
+                    )
+                admitted.update(
+                    {
+                        s.evidence_id: s
+                        for s in result.spans
+                        if s.trace_id == log.attributes["trace_id"]
+                        and s.span_id
+                        in {log.attributes["span_id"], log.attributes["parent_span_id"]}
+                    }
+                )
+        spans = tuple(admitted.values())
+        diagnostics = TempoSearchDiagnostics(
+            completeness=TempoSearchCompleteness.BEST_EFFORT,
+            candidate_trace_ids=result.attempted_trace_ids,
+            search_limit_reached=False,
+            inspected_traces=None,
+            inspected_bytes=None,
+            completed_jobs=None,
+            total_jobs=None,
+            fetched_trace_ids=result.attempted_trace_ids,
+            missing_trace_ids=(),
+        )
+        runtime = _tempo_runtime_context(
+            backend=self.backend,
+            case=case,
+            target=target,
+            requested=requested,
+            source_ids=tuple(s.evidence_id for s in spans),
+            spans=spans,
+            diagnostics=diagnostics,
+        )
+        if runtime is not None and not spans:
+            runtime = runtime.model_copy(update={"state": RuntimeObservationState.UNKNOWN})
+        return self._observation(
+            gap,
+            target,
+            {
+                "traces": [s.model_dump(mode="json") for s in spans],
+                "trace_call_facts": [
+                    f.model_dump(mode="json") for f in derive_runtime_trace_call_facts(spans)
+                ],
+                "request_pair_assessments": [a.model_dump(mode="json") for a in result.assessments],
+                "request_pair_cost": {
+                    "trace_fetch_attempts": len(result.attempted_trace_ids),
+                    "returned_spans": result.returned_span_count,
+                },
+                "source_log_ids": requested.source_log_ids,
+                "pair_scope": {
+                    "visible_eligible_log_count": len(by_id),
+                    "selected_log_count": len(logs),
+                    "unselected_visible_log_count": len(by_id) - len(logs),
+                    "symptom_measurement_accounting": "UNASSESSED",
+                },
+            },
+            refs=tuple(s.evidence_id for s in spans),
+            runtime=runtime,
+            observed_at=max((s.start_at for s in spans), default=None),
         )
 
 

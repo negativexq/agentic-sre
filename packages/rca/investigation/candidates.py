@@ -7,8 +7,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from hashlib import sha256
 
+from packages.rca.claims import actor_findings
 from packages.rca.engine import Case, EngineConfig
 from packages.rca.investigation.actions import observation_identity
+from packages.rca.investigation.request_pairs import eligible_logs, pair_provider
 from packages.rca.model import (
     Diagnosis,
     EntityRef,
@@ -441,6 +443,14 @@ def build_observation_candidates(
             )
             if query is None:
                 continue
+            if authorized.capability == "runtime_traces" and pair_provider(case.source) is not None:
+                selected_logs = eligible_logs(
+                    case, authorized.target, query, missing_only=True, gap=gap
+                )[:8]
+                if selected_logs:
+                    query = query.model_copy(
+                        update={"source_log_ids": tuple(r.evidence_id for r in selected_logs)}
+                    )
             identity = observation_identity(authorized.capability, authorized.target, query)
             accumulator = accumulators.get(identity)
             if accumulator is None:
@@ -476,6 +486,17 @@ def build_observation_candidates(
                     for hypothesis in hypotheses
                     if hypothesis.causal_actor == authorized.target
                 }
+                if query.source_log_ids:
+                    target_hypothesis_ids.update(
+                        h.hypothesis_id
+                        for h in case.hypotheses
+                        if h.hypothesis_id in gap.hypothesis_ids
+                        and any(
+                            f.kind is FindingKind.DEPENDENCY_ERRORS
+                            and f.details.get("caller") == authorized.target.canonical
+                            for f in actor_findings(h)
+                        )
+                    )
                 target_alternative_ids = set(authorized.alternative_ids) | {
                     alternative.alternative_id
                     for alternative in diagnosis.structural_alternatives

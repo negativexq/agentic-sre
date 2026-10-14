@@ -863,7 +863,7 @@ class LiveSource:
 
     def supports_typed_runtime(self, capability: str) -> bool:
         """Report configured typed providers independently of query results."""
-        if capability == "runtime_traces":
+        if capability in {"runtime_traces", "runtime_trace_pairs"}:
             return self.provider_adapter is not None and self.provider_adapter.supports(capability)
         if capability in {"resource_pressure", "traffic"}:
             return self.provider_adapter is not None and self.provider_adapter.supports(capability)

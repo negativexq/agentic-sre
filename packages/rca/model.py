@@ -1439,6 +1439,14 @@ class InvestigationQuery(BaseModel):
     reasons: tuple[str, ...] = ()
     contains: tuple[str, ...] = ()
     limit: int = Field(default=32, ge=1, le=64)
+    source_log_ids: tuple[str, ...] = Field(default=(), max_length=8)
+
+    @model_serializer(mode="wrap")
+    def _legacy_query_shape(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if not self.source_log_ids:
+            value.pop("source_log_ids", None)
+        return value
 
 
 class RuntimeEvidencePillar(StrEnum):

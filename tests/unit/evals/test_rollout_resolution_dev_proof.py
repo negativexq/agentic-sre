@@ -36,7 +36,7 @@ def test_experimental_guard_does_not_rewrite_root_support_or_frontier(name: str)
     result = evaluate(name)
     assert all(result["invariants"].values())
     assert result["production_rule_registered"] is False
-    assert RCA_ENGINE_VERSION == "2.18.0"
+    assert RCA_ENGINE_VERSION == "2.19.0"
     expected = "RESOLVED" if name == "current_refusal_complete" else "AMBIGUOUS"
     assert result["guarded_experiment"]["resolution"] == expected
 

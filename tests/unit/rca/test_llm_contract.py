@@ -51,6 +51,7 @@ def test_investigation_wire_schema_is_openai_strict() -> None:
         "reasons",
         "contains",
         "limit",
+        "source_log_ids",
     }
     assert query["additionalProperties"] is False
     assert "metric" not in query["properties"]

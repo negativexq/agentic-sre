@@ -594,3 +594,29 @@ def test_development_log_trace_read_requires_service_identity_and_event_window(
         with pytest.raises(ValueError):
             probe.trace_for_log(invalid, T0, T0)
     assert len(calls) == 1
+
+
+def test_development_search_has_explicit_bounded_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.rca.provider_adapter import DevelopmentTransportProbe
+
+    probe = DevelopmentTransportProbe("http://unused-loki", "http://unused-tempo")
+    requests: list[object] = []
+
+    def get(*args: object, **kwargs: object) -> dict[str, object]:
+        requests.append(args[2])
+        return {"traces": []}
+
+    monkeypatch.setattr(type(probe._traces), "_get_json", get)
+    probe.search("binding-dev-order-1234abcd", T0, T0, limit=8)
+    assert requests == [
+        {
+            "q": '{ resource.service.name = "binding-dev-order-1234abcd" }',
+            "start": int(T0.timestamp()) - 1,
+            "end": int(T0.timestamp()),
+            "limit": 8,
+        }
+    ]
+    for invalid in (0, 501):
+        with pytest.raises(ValueError, match="limit"):
+            probe.search("binding-dev-order-1234abcd", T0, T0, limit=invalid)
+    assert len(requests) == 1

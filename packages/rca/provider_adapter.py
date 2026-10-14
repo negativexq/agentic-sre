@@ -717,8 +717,12 @@ class DevelopmentTransportProbe:
         self._service(service)
         return self._logs.error_logs([service], start, end)
 
-    def search(self, service: str, start: datetime, end: datetime) -> Mapping[str, object]:
+    def search(
+        self, service: str, start: datetime, end: datetime, *, limit: int = 500
+    ) -> Mapping[str, object]:
         self._service(service)
+        if not 1 <= limit <= 500:
+            raise ValueError("DEV search limit must be 1..500")
         if (
             start.utcoffset() is None
             or end.utcoffset() is None
@@ -731,7 +735,7 @@ class DevelopmentTransportProbe:
                 "q": '{ resource.service.name = "' + service + '" }',
                 "start": int(start.timestamp()) - 1,
                 "end": int(end.timestamp()),
-                "limit": 500,
+                "limit": limit,
             },
             1_048_576,
         )

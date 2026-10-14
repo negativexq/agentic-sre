@@ -620,3 +620,29 @@ def test_development_search_has_explicit_bounded_limit(monkeypatch: pytest.Monke
         with pytest.raises(ValueError, match="limit"):
             probe.search("binding-dev-order-1234abcd", T0, T0, limit=invalid)
     assert len(requests) == 1
+
+
+def test_development_kubernetes_probe_uses_existing_target_reader_and_rejects_other_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.rca.provider_adapter import DevelopmentTransportProbe
+
+    probe = DevelopmentTransportProbe("http://unused-loki", "http://unused-tempo")
+    requests: list[object] = []
+
+    def get(*args: object, **kwargs: object) -> dict[str, object]:
+        requests.append(args[2])
+        return {"traces": []}
+
+    monkeypatch.setattr(type(probe._traces), "_get_json", get)
+    result = probe.kubernetes_traces("binding-dev-1234abcd", "binding-dev-order-1234abcd", T0, T0)
+    assert result.spans == ()
+    assert len(requests) == 1
+    assert "binding-dev-1234abcd" in str(requests[0])
+    for namespace, deployment in (
+        ("sre-demo", "order-service"),
+        ("binding-dev-1234abcd", "binding-dev-order-00000000"),
+    ):
+        with pytest.raises(ValueError, match="DEV"):
+            probe.kubernetes_traces(namespace, deployment, T0, T0)
+    assert len(requests) == 1

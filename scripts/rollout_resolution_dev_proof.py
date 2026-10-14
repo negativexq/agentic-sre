@@ -136,7 +136,18 @@ def variant(name: str) -> InMemorySource:
 
 
 def evaluate(name: str) -> dict[str, Any]:
-    observed = variant(name)
+    return evaluate_source(
+        variant(name), name, assessment_kind="FROZEN_DEVELOPMENT_FIXTURE_COUNTERFACTUAL"
+    )
+
+
+def evaluate_source(
+    observed: InMemorySource,
+    name: str,
+    *,
+    assessment_kind: str = "FROZEN_DEVELOPMENT_SOURCE_COUNTERFACTUAL",
+) -> dict[str, Any]:
+    """Evaluate an explicit DEV source with the unregistered scope guard."""
     case = build_case(observed)
     baseline = diagnose_case(case)
     accounting = assess_rollout_refusal_accounting(case, baseline)
@@ -192,7 +203,7 @@ def evaluate(name: str) -> dict[str, Any]:
 
     return {
         "case": name,
-        "assessment_kind": "FROZEN_DEVELOPMENT_FIXTURE_COUNTERFACTUAL",
+        "assessment_kind": assessment_kind,
         "production": brief(baseline),
         "guarded_experiment": brief(experiment),
         "accounting": [asdict(row) for row in accounting],

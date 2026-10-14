@@ -766,3 +766,18 @@ class DevelopmentTransportProbe:
         if payload is None:
             raise ValueError("Requested DEV log trace is unavailable")
         return payload
+
+    def kubernetes_traces(
+        self, namespace: str, deployment: str, start: datetime, end: datetime
+    ) -> TempoTraceBatch:
+        """Existing bounded target query, restricted to an isolated DEV deployment."""
+        from packages.rca.model import InvestigationQuery
+
+        if not re.fullmatch(r"binding-dev-[0-9a-f]{8}", namespace):
+            raise ValueError("Kubernetes probe requires an isolated binding DEV namespace")
+        if deployment != "binding-dev-order-" + namespace.removeprefix("binding-dev-"):
+            raise ValueError("Kubernetes probe deployment must match the DEV namespace identity")
+        return self._traces.query(
+            EntityRef(namespace=namespace, kind="Deployment", name=deployment),
+            InvestigationQuery(start=start, end=end, limit=32),
+        )

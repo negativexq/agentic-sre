@@ -740,3 +740,25 @@ class DevelopmentTransportProbe:
         if not re.fullmatch(r"[0-9a-f]{16,32}", trace_id):
             raise ValueError("Invalid DEV trace identity")
         return self._traces._get_json(f"/api/v2/traces/{trace_id}", {}, 4_194_304)
+
+    def trace_for_log(self, log: LogRecord, start: datetime, end: datetime) -> Mapping[str, object]:
+        """DEV-only exact trace read scoped by a frozen log and bounded event window."""
+        self._service(log.service)
+        trace_id = log.attributes.get("trace_id", "")
+        if not re.fullmatch(r"[0-9a-f]{32}", trace_id) or not int(trace_id, 16):
+            raise ValueError("Explicit nonzero 32-hex log trace identity required")
+        if (
+            start.utcoffset() is None
+            or end.utcoffset() is None
+            or log.at is None
+            or log.at.utcoffset() is None
+            or not 0 <= (end - start).total_seconds() <= 3600
+            or not start <= log.at <= end
+        ):
+            raise ValueError("DEV log trace read requires a matching zoned window <= 3600 seconds")
+        payload = self._traces._fetch_trace(
+            trace_id, int(start.timestamp()) - 1, int(end.timestamp()) + 1
+        )
+        if payload is None:
+            raise ValueError("Requested DEV log trace is unavailable")
+        return payload

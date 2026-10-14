@@ -561,3 +561,36 @@ def test_development_transport_probe_cannot_read_production_services(
         probe.error_logs("order-service", T0, T0)
     with pytest.raises(ValueError, match="zoned"):
         probe.search("binding-dev-order-1234abcd", T0.replace(tzinfo=None), T0)
+
+
+def test_development_log_trace_read_requires_service_identity_and_event_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.rca.provider_adapter import DevelopmentTransportProbe
+
+    probe = DevelopmentTransportProbe("http://unused-loki", "http://unused-tempo")
+    calls: list[tuple[object, ...]] = []
+
+    def fetch(*args: object) -> dict[str, object]:
+        calls.append(args)
+        return {"trace": {"resourceSpans": []}}
+
+    monkeypatch.setattr(type(probe._traces), "_fetch_trace", fetch)
+    log = LogRecord(
+        service="binding-dev-order-1234abcd",
+        at=T0,
+        severity="ERROR",
+        message="dependency failed",
+        evidence_id="dev-log",
+        attributes={"trace_id": "a" * 32},
+    )
+    assert probe.trace_for_log(log, T0, T0) == {"trace": {"resourceSpans": []}}
+    assert len(calls) == 1
+    for invalid in (
+        log.model_copy(update={"service": "order-service"}),
+        log.model_copy(update={"attributes": {"trace_id": "0" * 32}}),
+        log.model_copy(update={"at": None}),
+    ):
+        with pytest.raises(ValueError):
+            probe.trace_for_log(invalid, T0, T0)
+    assert len(calls) == 1

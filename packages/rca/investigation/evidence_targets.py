@@ -173,6 +173,42 @@ def candidate_evidence_targets(
 
         for target in candidate_precondition_targets(candidate, diagnosis):
             grouped[target.contract_id] = target
+    if diagnosis is not None and diagnosis.resolution_trace is not None:
+        for target in candidate.rule_input_targets:
+            if any(
+                audit.hypothesis_id in target.source_hypothesis_ids
+                and any(
+                    support.rule_id in target.consumer_ids
+                    and support.rule_version == "v1"
+                    and support.status is RootSupportStatus.NOT_FIRED
+                    and target.source_rule_reason in support.reasons
+                    for support in audit.root_support
+                )
+                for audit in diagnosis.resolution_trace.hypothesis_audits
+            ):
+                previous = grouped.get(target.contract_id)
+                if previous is not None:
+                    target = target.model_copy(
+                        update={
+                            "source_gap_ids": tuple(
+                                sorted(set(previous.source_gap_ids + target.source_gap_ids))
+                            ),
+                            "source_hypothesis_ids": tuple(
+                                sorted(
+                                    set(
+                                        previous.source_hypothesis_ids
+                                        + target.source_hypothesis_ids
+                                    )
+                                )
+                            ),
+                            "required_observations": tuple(
+                                dict.fromkeys(
+                                    previous.required_observations + target.required_observations
+                                )
+                            ),
+                        }
+                    )
+                grouped[target.contract_id] = target
     return tuple(grouped[key] for key in sorted(grouped))
 
 
@@ -183,7 +219,7 @@ def evidence_target_specificity(
     return max(
         (
             3
-            if target.acquisition_class == "DIRECT"
+            if target.acquisition_class == "DIRECT" or target.input_scope == "RULE_INPUT"
             else 0
             if target.kind == "UNMAPPED"
             else 1
@@ -206,6 +242,7 @@ def recorded_evidence_deficits(
     trace = diagnosis.resolution_trace
     if trace is None:
         return ()
+    from packages.rca.investigation.execution_inputs import REASONS
     from packages.rca.investigation.preconditions import (
         candidate_precondition_targets,
         frontier_input_contract,
@@ -228,7 +265,41 @@ def recorded_evidence_deficits(
                         source_id=audit.hypothesis_id,
                         rule_id=support.rule_id,
                         missing_precondition=reason,
-                        routing="NO_REGISTERED_TOOL_ROUTE",
+                        candidate_ids=tuple(
+                            sorted(
+                                candidate.candidate_id
+                                for candidate in candidates
+                                if any(
+                                    audit.hypothesis_id in target.source_hypothesis_ids
+                                    and support.rule_id in target.consumer_ids
+                                    and target.source_rule_reason == reason
+                                    for target in candidate.rule_input_targets
+                                )
+                            )
+                        ),
+                        routing="OBSERVATION_ROUTE_ONLY"
+                        if any(
+                            audit.hypothesis_id in target.source_hypothesis_ids
+                            and support.rule_id in target.consumer_ids
+                            and target.source_rule_reason == reason
+                            for candidate in candidates
+                            for target in candidate.rule_input_targets
+                        )
+                        else "NO_REGISTERED_TOOL_ROUTE",
+                        acquisition_class="PARTIAL"
+                        if REASONS.get(support.rule_id) == reason and support.rule_version == "v1"
+                        else "UNMAPPED",
+                        required_observations=tuple(
+                            dict.fromkeys(
+                                requirement
+                                for candidate in candidates
+                                for target in candidate.rule_input_targets
+                                if audit.hypothesis_id in target.source_hypothesis_ids
+                                and support.rule_id in target.consumer_ids
+                                and target.source_rule_reason == reason
+                                for requirement in target.required_observations
+                            )
+                        ),
                         evidence_ids=support.decisive_evidence_ids,
                     )
             for witness in support.witnesses:

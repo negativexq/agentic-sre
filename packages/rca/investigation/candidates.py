@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from hashlib import sha256
 
@@ -23,6 +23,7 @@ from packages.rca.model import (
     InformationGap,
     InformationGapOrigin,
     InvestigationDiscriminatorKind,
+    InvestigationEvidenceTarget,
     InvestigationQuery,
 )
 
@@ -107,6 +108,7 @@ class ObservationCandidate:
     discriminators: tuple[CandidateDiscriminator, ...] = ()
     known_evidence_refs: tuple[str, ...] = ()
     known_fact_keys: tuple[str, ...] = ()
+    rule_input_targets: tuple[InvestigationEvidenceTarget, ...] = ()
 
 
 @dataclass
@@ -312,7 +314,10 @@ def _candidate_discriminator(
     comparison_alternative_ids = plausible_alternative_ids - supported_alternative_ids
     if not (supported_hypothesis_ids or supported_alternative_ids):
         return None
-    if not (comparison_hypothesis_ids or comparison_alternative_ids):
+    if (
+        not (comparison_hypothesis_ids or comparison_alternative_ids)
+        and gap.execution_input_target is None
+    ):
         return None
     return CandidateDiscriminator(
         gap_id=gap.gap_id,
@@ -455,7 +460,28 @@ def build_observation_candidates(
             )
             if query is None:
                 continue
-            if authorized.capability == "runtime_traces" and pair_provider(case.source) is not None:
+            goal = gap.execution_input_target
+            if goal is not None and goal.required_start is not None:
+                if (
+                    query.start is None
+                    or query.end is None
+                    or (goal.required_end is not None and goal.required_end > query.end)
+                ):
+                    continue
+                if authorized.capability != "runtime_traces" and goal.required_start < query.start:
+                    continue
+                start = min(query.start, goal.required_start)
+                if (
+                    authorized.capability == "runtime_traces"
+                    and query.end - start > _MAX_PROVIDER_WINDOW
+                ):
+                    continue
+                query = query.model_copy(update={"start": start})
+            if (
+                authorized.capability == "runtime_traces"
+                and gap.execution_input_target is None
+                and pair_provider(case.source) is not None
+            ):
                 selected_logs = eligible_logs(
                     case, authorized.target, query, missing_only=True, gap=gap
                 )[:8]
@@ -546,6 +572,22 @@ def build_observation_candidates(
             known_fact_keys=tuple(sorted(accumulator.known_fact_keys)),
         )
         for identity, accumulator in accumulators.items()
+    ]
+    candidates = [
+        replace(
+            candidate,
+            rule_input_targets=tuple(
+                gap.execution_input_target
+                for gap in diagnosis.information_gaps
+                if gap.execution_input_target is not None
+                and gap.gap_id in candidate.gap_ids
+                and any(
+                    query.capability == candidate.capability and query.target == candidate.target
+                    for query in gap.authorized_queries
+                )
+            ),
+        )
+        for candidate in candidates
     ]
     return tuple(
         sorted(

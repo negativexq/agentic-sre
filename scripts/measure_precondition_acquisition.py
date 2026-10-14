@@ -109,6 +109,10 @@ def precondition_metrics(result: InvestigationResult) -> dict[str, Any]:
 
 
 def measure(root: Path, output: Path) -> None:
+    if RCA_ENGINE_VERSION != "2.22.0":
+        raise ValueError(
+            "This frozen frontier-registry measurement requires engine 2.22.0; newer execution-input routes need a separate protocol."
+        )
     if output.exists():
         raise ValueError("Fresh output directory required")
     dataset = ITBenchLiteDataset.open(root)

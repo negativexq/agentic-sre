@@ -4249,3 +4249,54 @@ wrong window/gap/version, unknown onset, duplication, partial metadata, closed
 conditions and real history-tool execution. No benchmark outcomes were consulted
 and no DEV/TEST/HOLDOUT run was used to design this registry. This is a first narrow
 route, not complete rule-to-query coverage or evidence of improved RCA accuracy.
+
+## 42. Execution/effect input goals (engine 2.23.0)
+
+[The frozen execution-input contract](execution-input-acquisition-contract.md)
+binds missing execution/effect witnesses to scoped constituent observations.
+The RCA kernel, witness rules, thresholds and budgets remain unchanged.
+
+A plausible claim must have a positive actor-owned origin retained in a FIRED
+change-onset-path/v2 witness. A registered rollout/failed-rollout/quota v1 record
+must be NOT_FIRED with its exact recorded reason. Strongly verified, explained
+and eliminated claims do not receive these goals. Composite witness absence is
+never interpreted as proof that every constituent is absent.
+
+Before investigation assessment, visible Case inputs are used to project scoped
+planning gaps: Deployment UID at the change, observed ReplicaSet/Pod creation and
+owner UID, old revision removal, failed Pod Warning with involved UID, execution
+call pairs and pre-change baseline, or quota rejection at the actual incident
+subject. Known relevant input facts suppress the corresponding goal. A missing
+owner UID cannot match an unknown Deployment UID. This suppression concerns an
+input already present; it never proves absence or completeness.
+
+Targets are limited to the recorded actor, observed episode members and explicit
+incident subjects. Unknown children are not enumerated or guessed. The goals
+carry exact authorized capability/target bindings and existing provider limits.
+Only the trace window may be extended to the rule's pre-change baseline, within
+the existing one-hour provider bound and frozen cutoff. Native history/event
+limits remain unchanged. Effect queries use the exact Deployment binding so old
+and new revisions can supply baseline and executing-Pod pairs; fetching only the
+new Pod cannot retrieve its pre-creation baseline. Existing rules validate the
+returned execution instance and effect.
+
+Generated gaps carry PARTIAL rule-input targets, with source claim IDs, rule
+reason/version identity, required observations and time bounds. They are refreshed
+at assessment and finalization, and stay outside the RCA epistemic digest. They
+do not create findings, witnesses, support or exclusion. Single-claim verification
+input goals do not require a rival; this exception applies only to registered
+execution-input gaps, while discovery and ordinary discriminators keep their
+existing behavior. Specificity is capped at 3 for concrete rule inputs and confers
+no resolution probability or extra decision authority. Normal intent, exact action
+validation, tape, namespace, identity and budget gates still apply.
+
+Root-support deficit reports now name matching partial input routes and requirements.
+Independent coverage, recovery, changed-field consumption, unknown rule versions and
+unregistered execution families remain unmapped. A successful partial read does not
+satisfy the full witness; NO_DATA leaves the question open. No AMBIGUOUS/RESOLVED
+optimization or scenario exceptions are introduced.
+
+The old 2.22.0 frontier-registry measurement is pinned to its engine: its snapshot
+capture-channel gate does not apply to these new execution goals. Archived artifacts
+remain unchanged. A future comparison needs a separately frozen execution-input
+on/off protocol; no DEV/TEST/HOLDOUT experiment is part of this implementation.

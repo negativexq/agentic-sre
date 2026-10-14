@@ -104,6 +104,7 @@ def test_missing_capture_channels_prevent_an_inapplicable_benchmark(
     from packages.evals.itbench.dataset import ITBenchLiteDataset
     from packages.rca.source import InMemorySource
 
+    monkeypatch.setattr(measurement, "RCA_ENGINE_VERSION", "2.22.0")
     manifest = tmp_path / "manifest.json"
     manifest.write_text("{}")
     dataset = SimpleNamespace(manifest_path=manifest, scenario=lambda scenario_id: scenario_id)
@@ -128,3 +129,11 @@ def test_missing_capture_channels_prevent_an_inapplicable_benchmark(
     assert summary["comparisons"] == []
     assert (output / "protocol.json").exists()
     assert (output / "runner.py").exists()
+
+
+def test_frozen_frontier_measurement_rejects_a_changed_acquisition_engine(tmp_path: Path) -> None:
+    import scripts.measure_precondition_acquisition as measurement
+
+    with pytest.raises(ValueError, match="requires engine 2.22.0"):
+        measurement.measure(tmp_path, tmp_path / "run")
+    assert not (tmp_path / "run").exists()

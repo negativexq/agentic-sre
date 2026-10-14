@@ -385,6 +385,18 @@ def _with_step(
 
 
 def _assess(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
+    from packages.rca.investigation.execution_inputs import project_execution_input_gaps
+
+    diagnosis = project_execution_input_gaps(
+        rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"]),
+        state["current_diagnosis"],
+        rt.supported_capabilities,
+    )
+    planned: InvestigationState = {**state, "current_diagnosis": diagnosis}
+    return {"current_diagnosis": diagnosis, **_assess_impl(planned, rt)}
+
+
+def _assess_impl(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
     diagnosis = state["current_diagnosis"]
     if (
         diagnosis.resolution is Resolution.RESOLVED
@@ -2441,6 +2453,13 @@ def _finalize(state: InvestigationState, rt: _Runtime) -> dict[str, Any]:
         raise AssertionError(
             "structured executed-action count does not match investigation tool_calls"
         )
+    from packages.rca.investigation.execution_inputs import project_execution_input_gaps
+
+    diagnosis = project_execution_input_gaps(
+        rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"]),
+        diagnosis,
+        rt.supported_capabilities,
+    )
     remaining_candidates = build_observation_candidates(
         case=rt.case_for(state.get("acquired_evidence_refs", ()), state["investigation_findings"]),
         diagnosis=diagnosis,

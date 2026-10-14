@@ -1592,6 +1592,8 @@ class InformationGap(BaseModel):
     resolvability: GapResolvability = GapResolvability.UNRESOLVABLE_WITH_CURRENT_TOOLS
     rationale: str = ""
 
+    execution_input_target: InvestigationEvidenceTarget | None = None
+
 
 class Hypothesis(BaseModel):
     """One causal episode assembled from one or more entity candidates.
@@ -1905,6 +1907,11 @@ class InvestigationEvidenceTarget(BaseModel):
     contract_id: str
     source_gap_ids: tuple[str, ...]
     source_alternative_ids: tuple[str, ...] = ()
+    source_hypothesis_ids: tuple[str, ...] = ()
+    source_rule_reason: str | None = None
+    input_scope: Literal["DECODER", "RULE_INPUT"] = "DECODER"
+    required_start: datetime | None = None
+    required_end: datetime | None = None
     kind: Literal["DISCOVERY", "MECHANISM", "RELATION", "OBSERVATION", "UNMAPPED"]
     fact_family: str
     required_observations: tuple[str, ...] = ()

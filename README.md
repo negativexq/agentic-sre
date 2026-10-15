@@ -233,7 +233,7 @@ token in the Secret `prod-eu-1-webhook`) so alerts arrive as they fire.
 - Investigation has fixed turn, read, wall-time, and per-gap budgets.
 - Some diagnoses depend on the configured read APIs and their authentication;
   built-in read endpoints are unauthenticated by default.
-- The supported deployment is single-process/single-replica rather than HA.
+- The supported deployment is single-process/single-replica; durable high-availability deployment is not built.
 - Run evidence manifests and ordered provider-read tapes are persisted, and
   offline replay verifies those persisted inputs. The local reference
   PostgreSQL Deployment has no durable volume configured, so evidence
@@ -259,12 +259,11 @@ token in the Secret `prod-eu-1-webhook`) so alerts arrive as they fire.
   service-level relation is confirmed on one small held-out set and needs
   traced calls to the target; a fault whose effect shows in
   neither still yields a correctly named but non-strong cause.
-- The testbed covers six fault families with three runs per variant, on one
-  demo workload; the held-out set is small. Rollouts have strong rules (C5a,
+- The testbed covers six fault families on one demo workload. The latest held-out set has nine variants with three
+  runs each, which is small. Rollouts have strong rules (C5a,
   C5b); config consumption without a rollout and autoscaling do not.
 - Evidence coverage is recorded but not yet read by the rules that infer from
   absence; until each is changed and measured, they behave as before.
-- General durable high-availability deployment is not yet complete.
 - Naming the cause is not resolving it. On the latest held-out set the cause leads in every run, but almost
   every final diagnosis stays `AMBIGUOUS`. Two gaps are known:
   - the rollout's own Pods remain unresolved rivals in later windows;

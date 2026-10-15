@@ -140,9 +140,9 @@ boundary, causal rules, evidence timing and the console).
 
 | Measurement | Result | What it is |
 | --- | ---: | --- |
-| Instrumented testbed, six fault families | cause named in **35/36** runs | development and the first held-out set; 0 false strong authority, 0 false `RESOLVED`, decoy never named; small |
+| Instrumented testbed, latest held-out set (HOLDOUT23, engine 2.17.0) | cause named in **27/27** runs | nine variants, three seeds each; 27/27 valid, 0 false strong authority, 0 false `RESOLVED`, decoy never named; only 1/27 scored diagnoses reach `RESOLVED`; small |
 | Live scenario suite | **25/25** expected outcomes | 16/16 root-cause actors, 9/9 abstentions, 0 fabricated `RESOLVED`; in-house labels |
-| ITBench-Lite, all 35, engine 2.2.2 (last measured) | **18/31** (58.1%) exact | the current engine, 2.3.1, has not been re-measured on all 35 yet |
+| ITBench-Lite, all 35, engine 2.17.0 | **18/31** (58.1%) exact | identical to engine 2.2.2, scenario by scenario |
 | ITBench-Lite TEST25, blind when frozen | 17/22 (77.3%) | historical architecture (`f96073d`) |
 | ITBench-Lite, all 35 | 26/31 (83.9%) | historical architecture |
 | Model calls | **0** | in every measurement above |
@@ -150,7 +150,7 @@ boundary, causal rules, evidence timing and the console).
 Since 2026-09-28 all 35 ITBench-Lite scenarios are **development data**: the engine has been worked on with them
 in view, so they are regression evidence, not a generalization estimate; the held-out measurement is the
 testbed. Four unmatchable published labels are excluded from the ITBench denominators. Evidence-backed
-equivalence tracks (20/31 for engine 2.2.2) are reported beside the exact score and never replace it.
+equivalence tracks (20/31 for engine 2.17.0) are reported beside the exact score and never replace it.
 
 All tables, protocols and limits: [Measured performance](docs/results/measured-performance.md).
 
@@ -265,12 +265,16 @@ token in the Secret `prod-eu-1-webhook`) so alerts arrive as they fire.
 - Evidence coverage is recorded but not yet read by the rules that infer from
   absence; until each is changed and measured, they behave as before.
 - General durable high-availability deployment is not yet complete.
+- Naming the cause is not resolving it. On the latest held-out set the cause leads in every run, but almost
+  every final diagnosis stays `AMBIGUOUS`. Two gaps are known:
+  - the rollout's own Pods remain unresolved rivals in later windows;
+  - evidence of the origin, the onset and the mechanism is often missing from what is captured.
 - The system is evidence-driven RCA, not formal causal inference.
 - There is no autonomous remediation, arbitrary shell execution, or cluster write
   tool.
 - The only blind generalization evidence, TEST25, has since been folded into
-  the development set; a new held-out measurement is being built on the testbed,
-  and larger and more diverse production datasets are still needed.
+  the development set; held-out measurement now comes from the testbed's small
+  pre-registered sets, and larger and more diverse production datasets are still needed.
 
 ## Roadmap
 

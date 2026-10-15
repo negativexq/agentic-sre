@@ -29,10 +29,10 @@ excluded from the accuracy denominator and reported separately.
 | All 35 combined | 26/31 (83.9%) | 26/35 | 0 |
 
 The table above is **historical**: the frozen architecture of its time. The engine has changed since and is
-measured separately. The last such measurement is engine 2.2.2 ([C11 analysis](../architecture/c11-itbench-equivalence.md); all 35
-scenarios, full-source path, 31 scoreable); the current engine, 2.3.1, has not been re-measured on all 35 yet:
+measured separately. The last such measurement is engine 2.17.0 (2026-10-13; all 35 scenarios, full-source path, 31
+scoreable). Every prediction is identical to engine 2.2.2's ([C11 analysis](../architecture/c11-itbench-equivalence.md)):
 
-| Engine 2.2.2 (last measured) | Correct | What it measures |
+| Engine 2.17.0 (same as 2.2.2) | Correct | What it measures |
 | --- | ---: | --- |
 | **Exact root cause (the ITBench score)** | **18/31 (58.1%)** | the answer equals the published label |
 | Evidence-backed causal equivalence | 20/31 (64.5%) | the answer is a `Schedule` whose own spawned experiment (controller record, one UID) ran across the incident's onset |
@@ -165,6 +165,25 @@ a sixth held-out set with the variant fixed named both causes in every run, agai
 testbed has also found and fixed real defects: a rule that gave strong authority to an experiment that had ended
 40 minutes before the incident, scorer flaws that overstated recall, harness isolation leaks, and short alerts that
 could fall between two Alertmanager polls. These are small results, not a benchmark.
+
+**Latest held-out set (HOLDOUT23, engine 2.17.0, 2026-10-13;
+[pre-registration and results](../architecture/testbed-scenarios-design.md), §41).** Nine variants with three new
+seeds each. `dependency-kafka-delay` is new: a delay on Kafka's Pod alone.
+
+| Measure | Result |
+| --- | ---: |
+| Valid runs | 27/27 |
+| Cause / instance named | 27/27 / 27/27 |
+| Execution witness | 24/27 |
+| Effect link | 8/27 |
+| False strong authority / false `RESOLVED` / false elimination | 0 / 0 / 0 |
+| Decoy named | 0 |
+| Scored diagnoses reaching `RESOLVED` | 1/27 |
+
+The cause leads every run, but nearly every final diagnosis stays `AMBIGUOUS`. The rule added for this set (m21 §36)
+answered 11 dependency questions, none wrongly. It resolved 5 diagnoses offline, but later windows of the same
+incidents admitted the rollout's own Pods as unresolved rivals. Alert timing is not comparable with earlier held-out
+sets, because the lab's error-rate counters were scraped twice before this set (design §39).
 
 ## Real Kubernetes validation
 
